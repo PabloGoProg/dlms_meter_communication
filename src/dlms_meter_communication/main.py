@@ -1,13 +1,15 @@
 from fastapi import FastAPI
+from dlms_meter_communication.core.config import config
+from dlms_meter_communication.core.logging import setup_logging
+
+logger = setup_logging()
 
 app = FastAPI(
-    title="DLMS Meter Communication",
-    description="API for DLMS Meter Communication",
-    version="0.1.0",
-    contact={"name": "PabloGoProg", "email": "pgosorio13@gmail.com"},
+    title=config.project_title,
+    description=config.project_description,
+    version=config.project_version,
+    contact={
+        "name": config.project_contact_name,
+        "email": config.project_contact_email,
+    },
 )
-
-
-@app.get("/")
-def hello_world():
-    return {"message": "Hello World"}
