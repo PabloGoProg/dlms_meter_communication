@@ -83,6 +83,45 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.8)", "htt
 standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[standard-no-fastapi-cloud-cli] (>=0.0.8)", "httpx (>=0.23.0,<1.0.0)", "jinja2 (>=3.1.5)", "python-multipart (>=0.0.18)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
+name = "gurux-common"
+version = "1.0.13"
+description = "Gurux common helpers for device commmunication."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "gurux_common-1.0.13-py3-none-any.whl", hash = "sha256:c2a55b6512787ac17d06121c9f535eb17bc2f43ebe043236bcfd07cea3ab7463"},
+    {file = "gurux_common-1.0.13.tar.gz", hash = "sha256:6a38e3b2ab9ac6c7e7d2c64799931323742b7af085db0cc1a5603a89525e0248"},
+]
+
+[[package]]
+name = "gurux-dlms"
+version = "1.0.191"
+description = "Gurux DLMS library for Python."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "gurux_dlms-1.0.191-py3-none-any.whl", hash = "sha256:7b708f22bc04114dd0076f693af13497bf0589dd3cff06b0e752a70761d79ff9"},
+    {file = "gurux_dlms-1.0.191.tar.gz", hash = "sha256:dd2b8df0d3055d27594f81067e84d92dccde046da70b989dd214f65a97429d9b"},
+]
+
+[[package]]
+name = "gurux-net"
+version = "1.0.23"
+description = "Gurux network media is used to commmunication with TCP/IP or UDP connections."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "gurux_net-1.0.23-py3-none-any.whl", hash = "sha256:0335f4f94d8bce74a8eb554c72f5eb6d773b9f989bc73116485fce0efa6eb1e6"},
+    {file = "gurux_net-1.0.23.tar.gz", hash = "sha256:623e8ee36749126bcfb23d37554bee4070052fb17de4eee0bb21dcc8c3781ee6"},
+]
+
+[package.dependencies]
+gurux-common = "*"
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
@@ -362,4 +401,4 @@ standard = ["colorama (>=0.4) ; sys_platform == \"win32\"", "httptools (>=0.6.3)
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "1d55d5164c8fff70985fad66d44cc4f73bcede7f7b98b11f2e24646fc5028779"
+content-hash = "cffe810ac7ddbfdc11fc6240ceb8998efaf2cac4d727d3ef9efc6d60f7128597"
