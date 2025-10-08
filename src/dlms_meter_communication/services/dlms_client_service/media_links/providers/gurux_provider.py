@@ -13,6 +13,11 @@ Gurux functionality to provide a clean, abstracted interface for meter communica
 
 from .base import ConnectionProvider
 from typing import Optional
+from .enums import HDLCBaudRate
+
+from dlms_meter_communication.services.dlms_client_service.enums import (
+    ConnectionInterfaceType,
+)
 
 from gurux_net import GXNet
 from gurux_net.enums import NetworkType
@@ -50,7 +55,12 @@ class GuruxProvider(ConnectionProvider):
     """
 
     def __init__(
-        self, ip_address: str, port: int, connection_type: NetworkType = NetworkType.TCP
+        self,
+        ip_address: str,
+        port: int,
+        connection_interface_type: ConnectionInterfaceType = ConnectionInterfaceType.TCP,
+        hdlc_connection_type: HDLCBaudRate = HDLCBaudRate.RS232_RS422,
+        hdlc_baud_rate: int = 9600,
     ) -> None:
         """
         Initialize the Gurux connection provider.
@@ -61,18 +71,21 @@ class GuruxProvider(ConnectionProvider):
         Args:
             ip_address (str): IP address of the DLMS/COSEM meter to connect to
             port (int): Port number for the connection (typically 4059 for DLMS)
-            connection_type (NetworkType): Type of network connection.
-                                         Defaults to TCP for reliable communication.
+            connection_interface_type (ConnectionInterfaceType): Type of network
+            connection. Defaults to TCP for reliable communication.
 
         Note:
             Common DLMS/COSEM ports:
             - 4059: Standard DLMS/COSEM port
             - 50000: Alternative port used by some manufacturers
             - 2404: IEC 62056-47 standard port
+
         """
         super().__init__(ip_address, port)
         self.net = None  # Will be initialized in connect()
-        self.connection_type = connection_type
+        self.connection_type = connection_interface_type
+        self.hdlc_connection_type = hdlc_connection_type
+        self.hdlc_baud_rate = hdlc_baud_rate
 
     def connect(self) -> None:
         """
@@ -98,10 +111,8 @@ class GuruxProvider(ConnectionProvider):
             The connection remains open until disconnect() is called.
         """
         try:
-            # Create GXNet instance with connection parameters
-            self.net = GXNet(
-                networkType=self.connection_type, name=self.ip_address, portNo=self.port
-            )
+            # Create the network connection
+            self._mount_network()
             # Establish the network connection
             self.net.open()
         except Exception as e:
@@ -237,6 +248,18 @@ class GuruxProvider(ConnectionProvider):
             It's safe to call frequently for connection monitoring.
         """
         return bool(self.net and self.net.isOpen())
+
+    def _mount_network(self) -> None:
+        if self.connection_type in (
+            ConnectionInterfaceType.TCP,
+            ConnectionInterfaceType.UDP,
+        ):
+            self.net = GXNet(
+                networkType=self.connection_type, name=self.ip_address, portNo=self.port
+            )
+            print(self.net, "mounted")
+        elif self.connection_type == ConnectionInterfaceType.HDLC:
+            raise NotImplementedError("HDLC connection type is not implemented")
 
     def _receive_tcp(self, size: int, timeout: Optional[float] = 10.0) -> bytes:
         """
@@ -393,3 +416,16 @@ class GuruxProvider(ConnectionProvider):
             # Handle any unexpected errors
             self.net.trace(TraceLevel.ERROR, f"Unexpected error: {e}")
             raise ConnectionError(f"Failed to receive data: {e}") from e
+
+    def _receive_hdlc(self, size: int, timeout: Optional[float] = 10.0) -> bytes:
+        """
+        Receive data using HDLC protocol.
+
+        Args:
+            size (int): Maximum number of bytes to receive
+            timeout (Optional[float]): Timeout in seconds for the entire operation
+
+        Returns:
+            bytes: The complete received data
+        """
+        raise NotImplementedError("HDLC connection type is not implemented")
