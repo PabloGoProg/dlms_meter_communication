@@ -32,9 +32,7 @@ import logging
 from typing import Optional, Tuple
 import ipaddress
 
-from dlms_meter_communication.services.dlms_client_service.enums import (
-    ConnectionInterfaceType,
-)
+from ....dlms_client_service.utils.enums import ConnectionMediaType
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
@@ -86,7 +84,7 @@ class SocketProvider(ConnectionProvider):
         self,
         ip_address: str,
         port: int,
-        connection_interface_type: ConnectionInterfaceType = ConnectionInterfaceType.TCP,
+        media_type: ConnectionMediaType = ConnectionMediaType.TCP,
         timeout: Optional[float] = DEFAULT_TIMEOUT,
     ) -> None:
         """
@@ -127,12 +125,12 @@ class SocketProvider(ConnectionProvider):
             None  # Socket object (None when disconnected)
         )
         self._peer: Optional[Tuple[str, int]] = None  # Remote endpoint tuple
-        self.connection_type = connection_interface_type  # Protocol type
+        self.media_type = media_type  # Protocol type
         self.timeout = timeout or DEFAULT_TIMEOUT  # Operation timeout
         self._is_connected = False  # Internal connection state flag
 
         logger.debug(
-            f"SocketProvider initialized: {ip_address}:{port} ({connection_interface_type.name})"
+            f"SocketProvider initialized: {ip_address}:{port} ({media_type.name})"
         )
 
     def connect(self) -> None:
@@ -169,19 +167,19 @@ class SocketProvider(ConnectionProvider):
             self._create_socket()
 
             # Establish connection for connection-oriented protocols
-            if self.connection_type in (
-                ConnectionInterfaceType.TCP,
-                ConnectionInterfaceType.UDP,
+            if self.media_type in (
+                ConnectionMediaType.TCP,
+                ConnectionMediaType.UDP,
             ):
                 # For TCP, this establishes the connection
                 # For UDP, this just sets the remote endpoint
                 self.sock.connect(self._peer)
                 logger.info(
-                    f"Connected to {self.ip_address}:{self.port} via {self.connection_type.name}"
+                    f"Connected to {self.ip_address}:{self.port} via {self.media_type.name}"
                 )
             else:
                 raise NotImplementedError(
-                    f"Connection type {self.connection_type.name} is not implemented"
+                    f"Connection type {self.media_type.name} is not implemented"
                 )
 
             # Update connection state
@@ -274,12 +272,12 @@ class SocketProvider(ConnectionProvider):
 
         try:
             # Send data using appropriate method for connection type
-            if self.connection_type == ConnectionInterfaceType.TCP:
+            if self.media_type == ConnectionMediaType.TCP:
                 # TCP: Use sendall to ensure all data is transmitted
                 self.sock.sendall(data)
                 logger.debug(f"Sent {len(data)} bytes via TCP")
 
-            elif self.connection_type == ConnectionInterfaceType.UDP:
+            elif self.media_type == ConnectionMediaType.UDP:
                 # UDP: Send as single datagram
                 if self._peer is None:
                     raise ConnectionError("UDP peer not set")
@@ -288,7 +286,7 @@ class SocketProvider(ConnectionProvider):
 
             else:
                 raise NotImplementedError(
-                    f"Send not implemented for {self.connection_type.name}"
+                    f"Send not implemented for {self.media_type.name}"
                 )
 
             return len(data)
@@ -331,13 +329,13 @@ class SocketProvider(ConnectionProvider):
 
         try:
             # Receive data using appropriate method for connection type
-            if self.connection_type == ConnectionInterfaceType.TCP:
+            if self.media_type == ConnectionMediaType.TCP:
                 return self._receive_tcp(size, timeout)
-            elif self.connection_type == ConnectionInterfaceType.UDP:
+            elif self.media_type == ConnectionMediaType.UDP:
                 return self._receive_udp(size, timeout)
             else:
                 raise NotImplementedError(
-                    f"Receive not implemented for {self.connection_type.name}"
+                    f"Receive not implemented for {self.media_type.name}"
                 )
 
         except Exception as e:
@@ -364,7 +362,7 @@ class SocketProvider(ConnectionProvider):
             return False
 
         # For UDP, internal state is sufficient
-        if self.connection_type == ConnectionInterfaceType.UDP:
+        if self.media_type == ConnectionMediaType.UDP:
             return True
 
         # For TCP, verify socket is still valid
@@ -391,14 +389,14 @@ class SocketProvider(ConnectionProvider):
         """
         # Determine socket family and type based on connection interface
         if self.connection_type in (
-            ConnectionInterfaceType.TCP,
-            ConnectionInterfaceType.UDP,
+            ConnectionMediaType.TCP,
+            ConnectionMediaType.UDP,
         ):
             # Use IPv4 for now (could be extended to support IPv6)
             sock_family = socket.AF_INET
 
             # Choose socket type based on protocol
-            if self.connection_type == ConnectionInterfaceType.TCP:
+            if self.media_type == ConnectionMediaType.TCP:
                 sock_type = socket.SOCK_STREAM  # Reliable, connection-oriented
             else:  # UDP
                 sock_type = socket.SOCK_DGRAM  # Unreliable, connectionless

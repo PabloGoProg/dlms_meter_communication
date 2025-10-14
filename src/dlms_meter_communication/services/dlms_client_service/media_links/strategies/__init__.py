@@ -1,6 +1,5 @@
 from .base import MediaLinkStrategy
-from .hdlc_strategy import HDLCStrategy
-from .tcp_strategy import TCPStrategy
-from .udp_strategy import UDPStrategy
+from .wrapper_profile_strategy import WrapperProfileStrategy
+from .hdlc_profile_strategy import HDLCProfileStrategy
 
-__all__ = ["MediaLinkStrategy", "HDLCStrategy", "TCPStrategy", "UDPStrategy"]
+__all__ = ["MediaLinkStrategy", "WrapperProfileStrategy", "HDLCProfileStrategy"]
