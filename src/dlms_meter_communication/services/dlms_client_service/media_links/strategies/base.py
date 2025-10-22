@@ -37,6 +37,7 @@ class MediaLinkStrategy(ABC):
         self.connection_provider_type = connection_provider_type
         self._connection_provider: Optional["ConnectionProvider"] = None
 
+    @abstractmethod
     def open(self) -> None:
         """
         Open the underlying media connection.
@@ -98,13 +99,12 @@ class MediaLinkStrategy(ABC):
         Raises:
             ValueError: If the connection provider type is not supported
         """
+
         if self.connection_provider_type.value == ConnectionProviderType.GURUX.value:
-            print("GuruxProvider")
             self._connection_provider = GuruxProvider(
                 ip_address, port, self.connection_media_type
             )
         elif self.connection_provider_type.value == ConnectionProviderType.SOCKET.value:
-            print("SocketProvider")
             self._connection_provider = SocketProvider(
                 ip_address, port, self.connection_media_type
             )

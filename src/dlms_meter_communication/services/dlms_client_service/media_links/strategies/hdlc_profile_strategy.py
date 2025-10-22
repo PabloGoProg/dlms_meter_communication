@@ -160,24 +160,14 @@ class HDLCProfileStrategy(MediaLinkStrategy):
             if not self._connection_provider.is_connected():
                 raise ConnectionError("Connection not established")
 
-            # Check if payload is already HDLC framed
-            if self.client_hdlc.is_hdlc_frame(payload):
-                # Already framed, send directly
-                framed_payload = payload
-            else:
-                # Frame the DLMS payload with HDLC
-                framed_payload = self.client_hdlc.create_frame(payload)
-
-            print(f"Framed payload: {framed_payload}")
-            # Send the HDLC frame
+            framed_payload = (
+                payload
+                if self.client_hdlc.is_hdlc_frame(payload)
+                else self.client_hdlc.create_frame(payload)
+            )
             self._connection_provider.send(framed_payload)
 
-            # Receive response - for HDLC, we need to handle variable frame sizes
-            # First, try to receive a reasonable amount of data
             response_data = self._connection_provider.receive(2048, timeout)
-            print(f"Response data: {response_data}")
-
-            # Parse the HDLC frame to extract DLMS payload
             try:
                 dlms_payload, _, _ = self.server_hdlc.parse_frame(response_data)
                 return dlms_payload

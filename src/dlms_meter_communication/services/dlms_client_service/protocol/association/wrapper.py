@@ -78,6 +78,8 @@ This wrapper is mandatory for all DLMS/COSEM communication over TCP/UDP networks
 and must be present before any actual DLMS protocol data.
 """
 
+import struct
+
 
 class Wrapper:
     """
@@ -160,9 +162,7 @@ class Wrapper:
 
         return _version_bytes + _source_bytes + _dest_bytes + _length_bytes + payload
 
-    def unwrap_dlms_message(
-        self, wrapped_message: bytes
-    ) -> tuple[tuple[int, int, int, int], bytes]:
+    def unwrap_dlms_message(self, wrapped_message: bytes) -> tuple[int, int, int, int]:
         """
         Unwrap a DLMS message by separating the header from the payload.
 
@@ -192,9 +192,8 @@ class Wrapper:
             )
 
         header_bytes = wrapped_message[0 : self.HEADER_LENGTH]
-        payload = wrapped_message[self.HEADER_LENGTH :]
 
-        return self._from_bytes(header_bytes), payload
+        return self._from_bytes(header_bytes)
 
     def is_wrapped(self, message: bytes) -> bool:
         """
@@ -257,9 +256,5 @@ class Wrapper:
                 f"Wrapper header must be exactly 8 bytes, got {len(data)} bytes"
             )
 
-        _version = int.from_bytes(data[0:2], byteorder="big")
-        _source_wport = int.from_bytes(data[2:4], byteorder="big")
-        _destination_wport = int.from_bytes(data[4:6], byteorder="big")
-        _length = int.from_bytes(data[6:8], byteorder="big")
-
-        return (_version, _source_wport, _destination_wport, _length)
+        _v, _s, _d, _l = struct.unpack(">HHHH", data)
+        return (_v, _s, _d, _l)

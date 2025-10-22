@@ -35,7 +35,10 @@ class WrapperProfileStrategy(MediaLinkStrategy):
         connection_provider_type: ConnectionProviderType = ConnectionProviderType.GURUX,
         connection_media_type: ConnectionMediaType = ConnectionMediaType.TCP,
     ) -> None:
-        super().__init__(connection_provider_type, connection_media_type)
+        super().__init__(
+            connection_media_type=connection_media_type,
+            connection_provider_type=connection_provider_type,
+        )
 
         self.ip_address = ip_address
         self.port = port
@@ -63,6 +66,9 @@ class WrapperProfileStrategy(MediaLinkStrategy):
             OSError: If network-level errors occur
         """
         try:
+            print(
+                f"Mounting connection provider: {self.connection_provider_type}, {self.connection_media_type}"
+            )
             self._mount_connection_provider(self.ip_address, self.port)
             if self._connection_provider.is_connected():
                 raise ConnectionError("Connection already established")
@@ -130,16 +136,18 @@ class WrapperProfileStrategy(MediaLinkStrategy):
             if not self._connection_provider.is_connected():
                 raise ConnectionError("Connection not established")
 
-            # Check if payload is already wrapped, if not wrap it with DLMS header
             if not self.message_wrapper.is_wrapped(payload):
                 payload = self.message_wrapper.wrap_dlms_message(payload)
 
             self._connection_provider.send(payload)
             wrapper_header = self._connection_provider.receive(8, timeout)
 
-            # Extract payload length from the 4th field of the header
-            # Receive the actual response payload based on the length from header
-            payload_length = wrapper_header[3]
+            v, s, d, payload_length = self.message_wrapper.unwrap_dlms_message(
+                wrapper_header
+            )
+            print(
+                f"Version: {v}, Source: {s}, Destination: {d}, Payload length: {payload_length}"
+            )
             payload = self._connection_provider.receive(payload_length, timeout)
 
             return payload
