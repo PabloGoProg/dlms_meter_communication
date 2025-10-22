@@ -143,7 +143,8 @@ class Wrapper:
             TypeError: If payload is not bytes
             ValueError: If payload is empty or too large
         """
-        if not isinstance(payload, bytes):
+        print(payload, type(payload))
+        if not isinstance(payload, (bytes, bytearray)):
             raise TypeError("Payload must be bytes")
 
         if len(payload) == 0:
@@ -248,7 +249,7 @@ class Wrapper:
             TypeError: If data is not bytes
             ValueError: If data is not exactly 8 bytes
         """
-        if not isinstance(data, bytes):
+        if not isinstance(data, (bytes, bytearray)):
             raise TypeError("Header data must be bytes")
 
         if len(data) != self.HEADER_LENGTH:

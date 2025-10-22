@@ -175,7 +175,7 @@ class GuruxProvider(ConnectionProvider):
         # Validate connection and data type state before attempting to send
         if not self.is_connected():
             raise ConnectionError("Connection not established")
-        if not isinstance(data, bytes):
+        if not isinstance(data, (bytes, bytearray)):
             raise ValueError("Data must be bytes")
 
         try:
@@ -218,7 +218,7 @@ class GuruxProvider(ConnectionProvider):
         # Route to appropriate reception method based on connection type
         return (
             self._receive_tcp(size, timeout)
-            if self.connection_type == NetworkType.TCP
+            if self.media_type.value == NetworkType.TCP.value
             else self._receive_udp(size, timeout)
         )
 
@@ -240,14 +240,14 @@ class GuruxProvider(ConnectionProvider):
         return bool(self.net and self.net.isOpen())
 
     def _mount_network(self) -> None:
-        if self.media_type in (
-            ConnectionMediaType.TCP,
-            ConnectionMediaType.UDP,
+        if self.media_type.value in (
+            ConnectionMediaType.TCP.value,
+            ConnectionMediaType.UDP.value,
         ):
             self.net = GXNet(
                 networkType=self.media_type, name=self.ip_address, portNo=self.port
             )
-        elif self.media_type == ConnectionMediaType.SERIAL:
+        elif self.media_type.value == ConnectionMediaType.SERIAL.value:
             raise NotImplementedError("Serial connection type is not implemented")
 
     def _receive_tcp(self, size: int, timeout: Optional[float] = 10.0) -> bytes:

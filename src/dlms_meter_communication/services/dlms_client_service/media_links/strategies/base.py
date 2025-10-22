@@ -98,12 +98,16 @@ class MediaLinkStrategy(ABC):
         Raises:
             ValueError: If the connection provider type is not supported
         """
-        if self.connection_provider_type == ConnectionProviderType.GURUX:
-            self._connection_provider = GuruxProvider(ip_address, port)
-            self._connection_provider.connection_type = self.connection_media_type
-        elif self.connection_provider_type == ConnectionProviderType.SOCKET:
-            self._connection_provider = SocketProvider(ip_address, port)
-            self._connection_provider.connection_type = self.connection_media_type
+        if self.connection_provider_type.value == ConnectionProviderType.GURUX.value:
+            print("GuruxProvider")
+            self._connection_provider = GuruxProvider(
+                ip_address, port, self.connection_media_type
+            )
+        elif self.connection_provider_type.value == ConnectionProviderType.SOCKET.value:
+            print("SocketProvider")
+            self._connection_provider = SocketProvider(
+                ip_address, port, self.connection_media_type
+            )
         else:
             raise ValueError(
                 f"Unsupported connection provider type: {self.connection_provider_type}"

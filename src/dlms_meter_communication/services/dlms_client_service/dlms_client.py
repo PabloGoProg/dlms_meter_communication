@@ -12,8 +12,8 @@ from .utils.enums import (
     ConnectionMediaType,
 )
 
-from gurux_dlms.enums import Authentication
-from gurux_dlms import GXDLMSClient, GXReplyData, GXByteBuffer
+from gurux_dlms.enums import Authentication, InterfaceType
+from gurux_dlms import GXDLMSClient, GXReplyData
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,9 @@ class DLMSClient(GXDLMSClient):
             serverAddress=server_address,
             forAuthentication=authentication,
             password=meter_password,
+            interfaceType=InterfaceType.WRAPPER
+            if communication_profile == CommunicationProfileType.WRAPPER_PROFILE
+            else InterfaceType.HDLC,
         )
 
         self.ip_address = ip_address
@@ -55,6 +58,10 @@ class DLMSClient(GXDLMSClient):
         self.communication_profile = communication_profile
         self.connection_provider = connection_provider
         self.connection_media = connection_media
+
+        print(f"Communication profile: {self.communication_profile}")
+        print(f"Connection provider: {self.connection_provider}")
+        print(f"Connection media: {self.connection_media}")
 
         self.media: MediaLinkStrategy = None
 
@@ -68,11 +75,12 @@ class DLMSClient(GXDLMSClient):
                 CommunicationProfileType.HDLC_TUNNELING_PROFILE,
             ):
                 snrm_req = self.snrmRequest()
-                ua_raw: bytes = self.media.transact(snrm_req[0])
+                ua_raw: bytes = self.media.transact(snrm_req)
                 ua_reply: GXReplyData = self._get_gxreply_from_bytes(ua_raw)
                 self.parseSnrmResponse(ua_reply.data)
 
             aarq_req = self.aarqRequest()
+            print(f"AARQ request: {aarq_req}")
             aarq_raw: bytes = self.media.transact(aarq_req[0])
             aarq_reply: GXReplyData = self._get_gxreply_from_bytes(aarq_raw)
             self.parseAarqResponse(aarq_reply.data)

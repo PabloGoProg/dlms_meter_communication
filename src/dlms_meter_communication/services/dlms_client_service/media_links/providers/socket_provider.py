@@ -187,19 +187,16 @@ class SocketProvider(ConnectionProvider):
 
         except socket.timeout as e:
             # Handle timeout during connection
-            self._cleanup_connection()
             raise TimeoutError(
                 f"Connection timeout to {self.ip_address}:{self.port}: {e}"
             ) from e
         except OSError as e:
             # Handle network-level errors
-            self._cleanup_connection()
             raise ConnectionError(
                 f"Network error connecting to {self.ip_address}:{self.port}: {e}"
             ) from e
         except Exception as e:
             # Handle any other unexpected errors
-            self._cleanup_connection()
             raise ConnectionError(f"Unexpected error connecting to meter: {e}") from e
 
     def disconnect(self) -> None:
@@ -261,7 +258,7 @@ class SocketProvider(ConnectionProvider):
             raise ConnectionError("Cannot send data - connection not established")
 
         # Validate input data
-        if not isinstance(data, bytes):
+        if not isinstance(data, (bytes, bytearray)):
             raise ValueError("Data must be bytes type")
 
         if len(data) == 0:
@@ -388,15 +385,15 @@ class SocketProvider(ConnectionProvider):
             NotImplementedError: If connection type is not supported
         """
         # Determine socket family and type based on connection interface
-        if self.connection_type in (
-            ConnectionMediaType.TCP,
-            ConnectionMediaType.UDP,
+        if self.media_type.value in (
+            ConnectionMediaType.TCP.value,
+            ConnectionMediaType.UDP.value,
         ):
             # Use IPv4 for now (could be extended to support IPv6)
             sock_family = socket.AF_INET
 
             # Choose socket type based on protocol
-            if self.media_type == ConnectionMediaType.TCP:
+            if self.media_type.value == ConnectionMediaType.TCP.value:
                 sock_type = socket.SOCK_STREAM  # Reliable, connection-oriented
             else:  # UDP
                 sock_type = socket.SOCK_DGRAM  # Unreliable, connectionless
@@ -411,12 +408,12 @@ class SocketProvider(ConnectionProvider):
             self._peer = (self.ip_address, self.port)
 
             logger.debug(
-                f"Created {self.connection_type.name} socket for {self.ip_address}:{self.port}"
+                f"Created {self.media_type.name} socket for {self.ip_address}:{self.port}"
             )
 
         else:
             raise NotImplementedError(
-                f"Socket creation not implemented for {self.connection_type.name}"
+                f"Socket creation not implemented for {self.media_type.name}"
             )
 
     def _receive_tcp(self, size: int, timeout: float) -> bytes:

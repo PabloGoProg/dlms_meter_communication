@@ -56,7 +56,10 @@ class HDLCProfileStrategy(MediaLinkStrategy):
             connection_provider_type: Provider implementation to use
             connection_media_type: Media type (TCP, UDP, SERIAL)
         """
-        super().__init__(connection_provider_type, connection_media_type)
+        super().__init__(
+            connection_provider_type=connection_provider_type,
+            connection_media_type=connection_media_type,
+        )
 
         self.ip_address = ip_address
         self.port = port
@@ -165,12 +168,14 @@ class HDLCProfileStrategy(MediaLinkStrategy):
                 # Frame the DLMS payload with HDLC
                 framed_payload = self.client_hdlc.create_frame(payload)
 
+            print(f"Framed payload: {framed_payload}")
             # Send the HDLC frame
             self._connection_provider.send(framed_payload)
 
             # Receive response - for HDLC, we need to handle variable frame sizes
             # First, try to receive a reasonable amount of data
             response_data = self._connection_provider.receive(2048, timeout)
+            print(f"Response data: {response_data}")
 
             # Parse the HDLC frame to extract DLMS payload
             try:

@@ -317,4 +317,5 @@ class HDLCFrame:
         Returns:
             bool: True if data appears to be HDLC frame
         """
+        print(data)
         return len(data) >= 2 and data[0] == self.FLAG and data[-1] == self.FLAG
