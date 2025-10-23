@@ -167,17 +167,9 @@ class HDLCProfileStrategy(MediaLinkStrategy):
             )
             self._connection_provider.send(framed_payload)
 
-            response_data = self._connection_provider.receive(2048, timeout)
-            try:
-                dlms_payload, _, _ = self.server_hdlc.parse_frame(response_data)
-                return dlms_payload
-            except ValueError:
-                # If parsing fails, the response might be larger or fragmented
-                # Try to receive more data and parse again
-                additional_data = self._connection_provider.receive(2048, timeout)
-                response_data += additional_data
-                dlms_payload, _, _ = self.server_hdlc.parse_frame(response_data)
-                return dlms_payload
+            response_data = self._connection_provider.receive(32, timeout)
+
+            return response_data
 
         except Exception as e:
             raise ConnectionError(f"Failed to transact HDLC data: {e}") from e

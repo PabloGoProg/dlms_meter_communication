@@ -172,6 +172,16 @@ class DLMSClient(GXDLMSClient):
         else:
             try:
                 self.media.open()
+
+                snrm = self.snrmRequest()
+                if snrm:
+                    self.media.transact(snrm)
+                    print(f"SNRM: {snrm}")
+                    ua_raw: bytes = self.media.transact(snrm)
+                    print(f"UA: {ua_raw}")
+                    self.parseUAResponse(ua_raw)
+                    print(f"UA response: {ua_raw}")
+
                 aarq = self.aarqRequest()
                 print(f"AARQ request: {aarq[0]}")
                 aare_raw: bytes = self.media.transact(aarq[0])

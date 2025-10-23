@@ -6,9 +6,9 @@ from dlms_meter_communication.services.dlms_client_service.utils.enums import (
 from .dlms_client import DLMSClient
 
 client = DLMSClient(
-    ip_address="172.31.32.1",
-    port=4058,
-    communication_profile=CommunicationProfileType.WRAPPER_PROFILE,
+    ip_address="10.105.39.91",
+    port=4060,
+    communication_profile=CommunicationProfileType.HDLC_TUNNELING_PROFILE,
     connection_provider=ConnectionProviderType.SOCKET,
     connection_media=ConnectionMediaType.TCP,
 )
