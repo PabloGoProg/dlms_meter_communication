@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 # from dlms_meter_communication.db.database import
 from dlms_meter_communication.core.config import config
 from dlms_meter_communication.core.logging import setup_logging
+from dlms_meter_communication.db.database import init_db
 
 logger = setup_logging()
 
@@ -12,6 +13,7 @@ logger = setup_logging()
 async def lifespan(app: FastAPI):
     # Before the application starts
     logger.info("Starting up...")
+    init_db()
     yield
     # After the application starts
     logger.info("Shutting down...")

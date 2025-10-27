@@ -1,13 +1,13 @@
 from .device import Device
-from .meassurement import Meassurement
+from .meassurement import Measurement
 from .negotiated_params import NegotiatedParams
 from .device_addressing import DeviceAddressing
-from .connection_endpoint import ConnectionEndpoint
+from .communication_endpoint import CommunicationEndpoint
 
 __all__ = [
     "Device",
-    "Meassurement",
+    "Measurement",
     "NegotiatedParams",
     "DeviceAddressing",
-    "ConnectionEndpoint",
+    "CommunicationEndpoint",
 ]
