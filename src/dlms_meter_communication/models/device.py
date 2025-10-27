@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from typing import Optional
 from datetime import datetime
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 from uuid import UUID
 from sqlalchemy import Column, text, DateTime
-from .base import BaseModel
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 
-class Device(BaseModel, table=True):
+class Device(SQLModel, table=True):
     __tablename__ = "devices"
 
     id: Optional[UUID] = Field(
@@ -32,5 +31,6 @@ class Device(BaseModel, table=True):
     updated_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True), nullable=False, server_onupdate=text("now()")
-        )
+        ),
+        default=text("now()"),
     )

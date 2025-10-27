@@ -17,7 +17,8 @@ dependencies = [
     "gurux-serial (>=1.0.21,<2.0.0)",
     "pyserial (>=3.5,<4.0)",
     "sqlmodel (>=0.0.27,<0.0.28)",
-    "psycopg2 (>=2.9.11,<3.0.0)"
+    "psycopg2 (>=2.9.11,<3.0.0)",
+    "pytest (>=8.4.2,<9.0.0)"
 ]
 
 [tool.poetry]

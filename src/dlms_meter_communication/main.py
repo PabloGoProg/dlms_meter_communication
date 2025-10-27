@@ -6,6 +6,8 @@ from dlms_meter_communication.core.config import config
 from dlms_meter_communication.core.logging import setup_logging
 from dlms_meter_communication.db.database import init_db
 
+from .api.v1.routers import devices
+
 logger = setup_logging()
 
 
@@ -27,4 +29,7 @@ app = FastAPI(
         "name": config.project_contact_name,
         "email": config.project_contact_email,
     },
+    lifespan=lifespan,
 )
+
+app.include_router(devices.router)

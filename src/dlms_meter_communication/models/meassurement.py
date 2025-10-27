@@ -3,9 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from .base import BaseModel
-
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 from sqlalchemy import Column, DateTime, ForeignKey, Text, text, Index
 from .enums import Quantity, Direction, Phase
 from sqlalchemy.dialects.postgresql import (
@@ -15,7 +13,7 @@ from sqlalchemy.dialects.postgresql import (
 )
 
 
-class Measurement(BaseModel, table=True):
+class Measurement(SQLModel, table=True):
     __tablename__ = "measurements"
 
     __table_args__ = (

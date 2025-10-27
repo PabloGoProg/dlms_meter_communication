@@ -10,6 +10,6 @@ def init_db():
     SQLModel.metadata.create_all(bind=engine)
 
 
-def get_session() -> Generator[Session, None, None]:
+def get_session():
     with Session(engine) as session:
         yield session

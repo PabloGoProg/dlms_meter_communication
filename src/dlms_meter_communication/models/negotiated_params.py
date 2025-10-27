@@ -3,13 +3,12 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from .base import BaseModel
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 from sqlalchemy import Column, DateTime, Integer, ForeignKey, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 
-class NegotiatedParams(BaseModel, table=True):
+class NegotiatedParams(SQLModel, table=True):
     __tablename__ = "negotiated_params"
 
     __table_args__ = (
@@ -59,5 +58,6 @@ class NegotiatedParams(BaseModel, table=True):
     updated_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True), nullable=False, server_onupdate=text("now()")
-        )
+        ),
+        default=text("now()"),
     )

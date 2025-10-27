@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from .base import BaseModel
 from .enums import Medium, Profile
 from typing import Optional
 from datetime import datetime
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 from sqlalchemy import (
     Column,
     text,
@@ -18,7 +17,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID, ENUM as PGENUM, INET
 from uuid import UUID
 
 
-class CommunicationEndpoint(BaseModel, table=True):
+class CommunicationEndpoint(SQLModel, table=True):
     __tablename__ = "comm_endpoints"
 
     __table_args__ = (
@@ -68,12 +67,12 @@ class CommunicationEndpoint(BaseModel, table=True):
     )
     medium: Medium = Field(
         sa_column=Column(
-            PGENUM(Medium, name="comm_medium_enum", create_type=True), nullable=False
+            PGENUM(Medium, name="medium_enum", create_type=True), nullable=False
         )
     )
     profile: Profile = Field(
         sa_column=Column(
-            PGENUM(Profile, name="comm_profile_enum", create_type=True), nullable=False
+            PGENUM(Profile, name="profile_enum", create_type=True), nullable=False
         )
     )
     ip: Optional[str] = Field(
@@ -92,5 +91,6 @@ class CommunicationEndpoint(BaseModel, table=True):
     updated_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True), nullable=False, server_onupdate=text("now()")
-        )
+        ),
+        default=text("now()"),
     )
