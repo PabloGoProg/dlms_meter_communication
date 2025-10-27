@@ -17,5 +17,15 @@ class Config(BaseSettings):
 
     node_env: str = Field(..., env="NODE_ENV")
 
+    DB_HOST: str = Field(..., env="DB_HOST")
+    DB_PORT: int = Field(..., env="DB_PORT")
+    DB_USER: str = Field(..., env="DB_USER")
+    DB_PASSWORD: str = Field(..., env="DB_PASSWORD")
+    DB_NAME: str = Field(..., env="DB_NAME")
+
+    @property
+    def db_url(self) -> str:
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
 
 config = Config()
