@@ -1,8 +1,25 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+# from dlms_meter_communication.db.database import
 from dlms_meter_communication.core.config import config
 from dlms_meter_communication.core.logging import setup_logging
+from dlms_meter_communication.db.database import init_db
+
+from .api.v1.routers import devices
 
 logger = setup_logging()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Before the application starts
+    logger.info("Starting up...")
+    init_db()
+    yield
+    # After the application starts
+    logger.info("Shutting down...")
+
 
 app = FastAPI(
     title=config.project_title,
@@ -12,4 +29,7 @@ app = FastAPI(
         "name": config.project_contact_name,
         "email": config.project_contact_email,
     },
+    lifespan=lifespan,
 )
+
+app.include_router(devices.router)

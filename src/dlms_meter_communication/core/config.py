@@ -15,7 +15,17 @@ class Config(BaseSettings):
         default="https://github.com/PabloGoProg/dlms-meter-communication"
     )
 
-    node_env: str = Field(..., env="NODE_ENV")
+    node_env: str = Field(..., validation_alias="NODE_ENV")
+
+    DB_HOST: str = Field(..., validation_alias="DB_HOST")
+    DB_PORT: int = Field(..., validation_alias="DB_PORT")
+    DB_USER: str = Field(..., validation_alias="DB_USER")
+    DB_PASSWORD: str = Field(..., validation_alias="DB_PASSWORD")
+    DB_NAME: str = Field(..., validation_alias="DB_NAME")
+
+    @property
+    def db_url(self) -> str:
+        return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
 
 config = Config()

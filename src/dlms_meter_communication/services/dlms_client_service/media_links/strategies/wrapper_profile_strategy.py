@@ -1,12 +1,12 @@
 """
-TCP Strategy for DLMS/COSEM Meter Communication
+Wrapper Profile Strategy for DLMS/COSEM Meter Communication
 
-This module implements the TCP-based media link strategy for DLMS/COSEM smart meter
-communication. It provides a high-level interface for establishing TCP connections,
+This module implements the IP-Oriented communication profile link strategy for DLMS/COSEM smart meter
+communication. It provides a high-level interface for establishing TCP or UDP connections,
 sending and receiving DLMS messages with proper wrapper headers, and managing
 connection state.
 
-The TCP strategy handles the complete communication flow:
+The IP-Oriented communication profile strategy handles the complete communication flow:
 1. Connection establishment and management
 2. DLMS message wrapping with proper headers
 3. Reliable message transmission and reception
@@ -18,98 +18,33 @@ while maintaining a consistent DLMS communication protocol.
 """
 
 from .base import MediaLinkStrategy
-from ..providers.base import ConnectionProvider
+from dlms_meter_communication.services.dlms_client_service.utils.enums import (
+    ConnectionProviderType,
+    ConnectionMediaType,
+)
 from ....dlms_client_service.protocol.association.wrapper import Wrapper
 
 
-class TCPStrategy(MediaLinkStrategy):
-    """
-    TCP-based media link strategy for DLMS/COSEM meter communication.
-
-    This class implements the TCP communication strategy for DLMS/COSEM smart meters.
-    It manages the complete communication lifecycle including connection establishment,
-    message wrapping/unwrapping, and reliable data transmission over TCP networks.
-
-    The strategy automatically handles DLMS wrapper headers, ensuring that all
-    messages are properly formatted according to the DLMS/COSEM standard for
-    TCP/UDP communication. It provides a clean interface for higher-level DLMS
-    protocol implementations.
-
-    Key Features:
-    - Automatic DLMS message wrapping with proper headers
-    - Connection state management and validation
-    - Reliable message transmission with timeout handling
-    - Support for any TCP-based connection provider
-    - Comprehensive error handling and reporting
-
-    Attributes:
-        ip_address (str): IP address of the target meter
-        port (int): TCP port number for the connection
-        client_address (str): Client-side port identifier for DLMS addressing
-        server_address (str): Server-side port identifier for DLMS addressing
-        connection_provider (ConnectionProvider): Low-level connection handler
-        message_wrapper (Wrapper): DLMS message wrapper for header management
-
-    Usage Pattern:
-        1. Create strategy with connection parameters
-        2. Call open() to establish connection
-        3. Use transact() to send/receive DLMS messages
-        4. Call close() to clean up connection
-
-    """
-
+class WrapperProfileStrategy(MediaLinkStrategy):
     def __init__(
         self,
         ip_address: str,
         port: int,
         client_address: str,
         server_address: str,
-        connection_provider: ConnectionProvider,
+        connection_provider_type: ConnectionProviderType = ConnectionProviderType.GURUX,
+        connection_media_type: ConnectionMediaType = ConnectionMediaType.TCP,
     ) -> None:
-        """
-        Initialize the TCP strategy with connection parameters and provider.
+        super().__init__(
+            connection_media_type=connection_media_type,
+            connection_provider_type=connection_provider_type,
+        )
 
-        This constructor sets up the TCP strategy with the necessary parameters
-        for DLMS/COSEM communication. It creates a message wrapper with the
-        specified client and server addresses for proper DLMS header generation.
-
-        Args:
-            ip_address (str): IP address of the target DLMS/COSEM meter
-                This should be a valid IPv4 or IPv6 address (e.g., "192.168.1.100")
-
-            port (int): TCP port number for the connection
-                Standard DLMS/COSEM port is 4059, but can be customized
-
-            client_address (str): Client-side port identifier for DLMS addressing
-                Common values: "1" (Client Management), "16" (Public Client)
-                This identifies who is sending the message
-
-            server_address (str): Server-side port identifier for DLMS addressing
-                Common values: "1" (Management Logical Device), "127" (All-station)
-                This identifies who should receive the message
-
-            connection_provider (ConnectionProvider): Low-level connection handler
-                This provider handles the actual TCP socket operations
-                Must implement the ConnectionProvider interface
-
-        Raises:
-            TypeError: If any parameter has an invalid type
-            ValueError: If any parameter has an invalid value
-        """
-        super().__init__()
-
-        # Store network connection parameters
         self.ip_address = ip_address
         self.port = port
-
-        # Store DLMS addressing parameters
         self.client_address = client_address
         self.server_address = server_address
 
-        # Store the connection provider for low-level network operations
-        self.connection_provider = connection_provider
-
-        # Create DLMS message wrapper with client/server addressing
         self.message_wrapper = Wrapper(
             source_wport=client_address,
             destination_wport=server_address,
@@ -131,12 +66,14 @@ class TCPStrategy(MediaLinkStrategy):
             OSError: If network-level errors occur
         """
         try:
-            if self.connection_provider is None:
-                raise ConnectionError("Connection provider is not set")
-            if self.connection_provider.is_connected():
+            print(
+                f"Mounting connection provider: {self.connection_provider_type}, {self.connection_media_type}"
+            )
+            self._mount_connection_provider(self.ip_address, self.port)
+            if self._connection_provider.is_connected():
                 raise ConnectionError("Connection already established")
 
-            self.connection_provider.connect()
+            self._connection_provider.connect()
 
         except Exception as e:
             raise ConnectionError(f"Failed to open connection: {e}") from e
@@ -156,12 +93,12 @@ class TCPStrategy(MediaLinkStrategy):
             OSError: If network-level errors occur during closure
         """
         try:
-            if self.connection_provider is None:
+            if self._connection_provider is None:
                 raise ConnectionError("Connection provider is not set")
-            if not self.connection_provider.is_connected():
+            if not self._connection_provider.is_connected():
                 raise ConnectionError("Connection not established")
 
-            self.connection_provider.disconnect()
+            self._connection_provider.disconnect()
 
         except Exception as e:
             raise ConnectionError(f"Failed to close connection: {e}") from e
@@ -194,22 +131,24 @@ class TCPStrategy(MediaLinkStrategy):
             ValueError: If payload is invalid or empty
         """
         try:
-            if self.connection_provider is None:
+            if self._connection_provider is None:
                 raise ConnectionError("Connection provider is not set")
-            if not self.connection_provider.is_connected():
+            if not self._connection_provider.is_connected():
                 raise ConnectionError("Connection not established")
 
-            # Check if payload is already wrapped, if not wrap it with DLMS header
             if not self.message_wrapper.is_wrapped(payload):
                 payload = self.message_wrapper.wrap_dlms_message(payload)
 
-            self.connection_provider.send(payload)
-            wrapper_header = self.connection_provider.receive(8, timeout)
+            self._connection_provider.send(payload)
+            wrapper_header = self._connection_provider.receive(8, timeout)
 
-            # Extract payload length from the 4th field of the header
-            # Receive the actual response payload based on the length from header
-            payload_length = wrapper_header[3]
-            payload = self.connection_provider.receive(payload_length, timeout)
+            v, s, d, payload_length = self.message_wrapper.unwrap_dlms_message(
+                wrapper_header
+            )
+            print(
+                f"Version: {v}, Source: {s}, Destination: {d}, Payload length: {payload_length}"
+            )
+            payload = self._connection_provider.receive(payload_length, timeout)
 
             return payload
 
@@ -224,4 +163,8 @@ class TCPStrategy(MediaLinkStrategy):
             bool: True if the connection is open and active, False otherwise
         """
         # Delegate to the connection provider to check actual connection state
-        return self.connection_provider.is_connected()
+        return (
+            self._connection_provider.is_connected()
+            if self._connection_provider
+            else False
+        )

@@ -1,12 +1,11 @@
 from .providers import ConnectionProvider, GuruxProvider, SocketProvider
-from .strategies import MediaLinkStrategy, HDLCStrategy, TCPStrategy, UDPStrategy
+from .strategies import MediaLinkStrategy, HDLCProfileStrategy, WrapperProfileStrategy
 
 __all__ = [
     "ConnectionProvider",
     "GuruxProvider",
     "SocketProvider",
     "MediaLinkStrategy",
-    "HDLCStrategy",
-    "TCPStrategy",
-    "UDPStrategy",
+    "HDLCProfileStrategy",
+    "WrapperProfileStrategy",
 ]

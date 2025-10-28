@@ -13,18 +13,12 @@ Gurux functionality to provide a clean, abstracted interface for meter communica
 
 from .base import ConnectionProvider
 from typing import Optional
-from .enums import HDLCBaudRate
-
-from dlms_meter_communication.services.dlms_client_service.enums import (
-    ConnectionInterfaceType,
-)
+from ....dlms_client_service.utils.enums import ConnectionMediaType
 
 from gurux_net import GXNet
 from gurux_net.enums import NetworkType
 from gurux_common import ReceiveParameters
 from gurux_common.enums import TraceLevel
-
-# Import built-in exceptions
 from builtins import ConnectionError
 
 
@@ -58,9 +52,7 @@ class GuruxProvider(ConnectionProvider):
         self,
         ip_address: str,
         port: int,
-        connection_interface_type: ConnectionInterfaceType = ConnectionInterfaceType.TCP,
-        hdlc_connection_type: HDLCBaudRate = HDLCBaudRate.RS232_RS422,
-        hdlc_baud_rate: int = 9600,
+        media_type: ConnectionMediaType = ConnectionMediaType.TCP,
     ) -> None:
         """
         Initialize the Gurux connection provider.
@@ -71,7 +63,7 @@ class GuruxProvider(ConnectionProvider):
         Args:
             ip_address (str): IP address of the DLMS/COSEM meter to connect to
             port (int): Port number for the connection (typically 4059 for DLMS)
-            connection_interface_type (ConnectionInterfaceType): Type of network
+            connection_interface_type (ConnectionMediaType): Type of network
             connection. Defaults to TCP for reliable communication.
 
         Note:
@@ -83,9 +75,7 @@ class GuruxProvider(ConnectionProvider):
         """
         super().__init__(ip_address, port)
         self.net = None  # Will be initialized in connect()
-        self.connection_type = connection_interface_type
-        self.hdlc_connection_type = hdlc_connection_type
-        self.hdlc_baud_rate = hdlc_baud_rate
+        self.media_type = media_type
 
     def connect(self) -> None:
         """
@@ -185,7 +175,7 @@ class GuruxProvider(ConnectionProvider):
         # Validate connection and data type state before attempting to send
         if not self.is_connected():
             raise ConnectionError("Connection not established")
-        if not isinstance(data, bytes):
+        if not isinstance(data, (bytes, bytearray)):
             raise ValueError("Data must be bytes")
 
         try:
@@ -228,7 +218,7 @@ class GuruxProvider(ConnectionProvider):
         # Route to appropriate reception method based on connection type
         return (
             self._receive_tcp(size, timeout)
-            if self.connection_type == NetworkType.TCP
+            if self.media_type.value == NetworkType.TCP.value
             else self._receive_udp(size, timeout)
         )
 
@@ -250,16 +240,15 @@ class GuruxProvider(ConnectionProvider):
         return bool(self.net and self.net.isOpen())
 
     def _mount_network(self) -> None:
-        if self.connection_type in (
-            ConnectionInterfaceType.TCP,
-            ConnectionInterfaceType.UDP,
+        if self.media_type.value in (
+            ConnectionMediaType.TCP.value,
+            ConnectionMediaType.UDP.value,
         ):
             self.net = GXNet(
-                networkType=self.connection_type, name=self.ip_address, portNo=self.port
+                networkType=self.media_type, name=self.ip_address, portNo=self.port
             )
-            print(self.net, "mounted")
-        elif self.connection_type == ConnectionInterfaceType.HDLC:
-            raise NotImplementedError("HDLC connection type is not implemented")
+        elif self.media_type.value == ConnectionMediaType.SERIAL.value:
+            raise NotImplementedError("Serial connection type is not implemented")
 
     def _receive_tcp(self, size: int, timeout: Optional[float] = 10.0) -> bytes:
         """
