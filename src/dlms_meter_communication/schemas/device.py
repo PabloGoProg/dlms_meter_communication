@@ -65,10 +65,10 @@ class DeviceCreate(BaseModel):
     """
 
     name: str
-    description: str = None
-    serial_number: str
-    brand: str = None
-    model: str = None
+    description: Optional[str] = None
+    serial_number: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
 
 
 class DeviceUpdate(BaseModel):

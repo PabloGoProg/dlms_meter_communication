@@ -87,10 +87,10 @@ CREATE TABLE negotiated_params (
   endpoint_id uuid NOT NULL REFERENCES comm_endpoints(id) ON DELETE CASCADE,
   max_info_rx integer,
   max_info_tx integer,
-  window integer,
+  win integer,
   max_pdu integer,
   created_at timestamp NOT NULL DEFAULT now(),
-  updated_at timestamp NOT NULL DEFAULT now()
+  updated_at timestamp NOT NULL DEFAULT now(),
   CONSTRAINT negotiated_params_device_endpoint_uniq UNIQUE (device_id, endpoint_id)
 );
 

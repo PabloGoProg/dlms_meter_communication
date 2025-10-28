@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Index,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, ENUM as PGENUM, INET
 from uuid import UUID
@@ -79,12 +80,14 @@ class CommunicationEndpoint(SQLModel, table=True):
         default=None,
         sa_column=Column(INET, nullable=True),
     )
-    port: Optional[int] = Field(default=None, sa_column=Column(Integer))
-    serial_port: Optional[str] = None
-    baud_rate: Optional[int] = None
+    port: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    serial_port: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    baud_rate: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
+    )
     is_primary: bool = Field(
         default=False,
-        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+        sa_column=Column(Boolean, nullable=False, default=False),
     )
 
     created_at: datetime = Field(

@@ -30,7 +30,7 @@ class DeviceAddressing(SQLModel, table=True):
 
     use_logical_name: bool = Field(
         default=True,
-        sa_column=Column(Boolean, nullable=False, server_default=text("true")),
+        sa_column=Column(Boolean, nullable=False, default=True),
     )
 
     created_at: datetime = Field(
