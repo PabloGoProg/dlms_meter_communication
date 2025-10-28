@@ -3,7 +3,7 @@ from __future__ import annotations
 from .enums import Medium, Profile
 from typing import Optional
 from datetime import datetime
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Boolean
 from sqlalchemy import (
     Column,
     text,
@@ -82,6 +82,10 @@ class CommunicationEndpoint(SQLModel, table=True):
     port: Optional[int] = Field(default=None, sa_column=Column(Integer))
     serial_port: Optional[str] = None
     baud_rate: Optional[int] = None
+    is_primary: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
 
     created_at: datetime = Field(
         sa_column=Column(
