@@ -14,17 +14,7 @@ from sqlmodel import Session, select
 
 from ..models.device import Device
 from ..schemas.device import DeviceCreate, DeviceUpdate
-
-
-class DeviceNotFoundError(Exception):
-    """
-    Exception raised when a requested device is not found.
-
-    This exception is raised when attempting to perform operations
-    on a device that doesn't exist in the database.
-    """
-
-    pass
+from sqlalchemy.exc import NoResultFound
 
 
 class DeviceRepository:
@@ -134,7 +124,7 @@ class DeviceRepository:
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(str(device_id))
 
         update_data = patch.model_dump(exclude_unset=True)
 
@@ -161,7 +151,7 @@ class DeviceRepository:
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(str(device_id))
 
         self._session.delete(entity)
         self._session.flush()
@@ -183,7 +173,10 @@ class DeviceRepository:
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(str(device_id))
 
-        self._session.delete(entity)
-        self._session.flush()
+        try:
+            self._session.delete(entity)
+            self._session.flush()
+        except Exception as e:
+            raise e

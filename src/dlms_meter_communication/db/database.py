@@ -12,7 +12,8 @@ from sqlmodel import SQLModel
 
 # Create database engine using the database URL from configuration
 # The engine manages the connection pool and database connectivity
-engine = create_engine(config.db_url)
+should_echo_sql = config.node_env == "development"
+engine = create_engine(config.db_url, echo=should_echo_sql)
 
 
 def init_db():

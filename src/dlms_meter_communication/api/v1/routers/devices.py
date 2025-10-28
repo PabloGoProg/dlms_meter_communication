@@ -33,6 +33,85 @@ from dlms_meter_communication.schemas.communication_endpoints import (
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
+@router.get(
+    "/{device_id}/communication-endpoints", response_model=CommunicationEndpointList
+)
+async def get_communication_endpoints(
+    device_id: UUID, session: Session = get_session_dependency()
+) -> JSONResponse:
+    """
+    Retrieve all communication endpoints for a device.
+
+    Returns a list of all communication endpoints associated with
+    the specified device, including connection details and parameters.
+
+    Args:
+        device_id: UUID of the device.
+        session: Database session dependency.
+
+    Returns:
+        JSONResponse: List of communication endpoints with HTTP 200 status.
+    """
+    communication_endpoint_repository = CommunicationEndpointRepository(session)
+    communication_endpoints = communication_endpoint_repository.index_by_device_id(
+        device_id
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=CommunicationEndpointList(
+            communication_endpoints=[
+                CommunicationEndpoint.model_validate(
+                    communication_endpoint, from_attributes=True
+                )
+                for communication_endpoint in communication_endpoints
+            ]
+        ).model_dump(mode="json"),
+    )
+
+
+@router.get(
+    "/{device_id}/communication-endpoints/primary", response_model=CommunicationEndpoint
+)
+async def get_primary_communication_endpoint(
+    device_id: UUID,
+    session: Session = get_session_dependency(),
+) -> JSONResponse:
+    """
+    Retrieve the primary communication endpoint for a device.
+
+    Returns the primary communication endpoint associated with the device.
+    Each device should have one primary endpoint for main communication.
+
+    Args:
+        device_id: UUID of the device.
+        session: Database session dependency.
+
+    Returns:
+        JSONResponse: Primary communication endpoint with HTTP 200 status,
+        or HTTP 404 if no primary endpoint exists.
+    """
+    communication_endpoint_repository = CommunicationEndpointRepository(session)
+    communication_endpoint = communication_endpoint_repository.get_primary_by_device_id(
+        device_id
+    )
+
+    if not communication_endpoint:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "message": "There is no primary communication endpoint for this device"
+            },
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=CommunicationEndpoint.model_validate(
+            communication_endpoint, from_attributes=True
+        ).model_dump(mode="json"),
+    )
+
+
 @router.get("/", response_model=DeviceList)
 async def index(session: Session = get_session_dependency()) -> JSONResponse:
     """
@@ -176,83 +255,4 @@ async def delete(
     return JSONResponse(
         status_code=status.HTTP_204_NO_CONTENT,
         content=None,
-    )
-
-
-@router.get(
-    "/{device_id}/communication-endpoints", response_model=CommunicationEndpointList
-)
-async def get_communication_endpoints(
-    device_id: UUID, session: Session = get_session_dependency()
-) -> JSONResponse:
-    """
-    Retrieve all communication endpoints for a device.
-
-    Returns a list of all communication endpoints associated with
-    the specified device, including connection details and parameters.
-
-    Args:
-        device_id: UUID of the device.
-        session: Database session dependency.
-
-    Returns:
-        JSONResponse: List of communication endpoints with HTTP 200 status.
-    """
-    communication_endpoint_repository = CommunicationEndpointRepository(session)
-    communication_endpoints = communication_endpoint_repository.index_by_device_id(
-        device_id
-    )
-
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=CommunicationEndpointList(
-            communication_endpoints=[
-                CommunicationEndpoint.model_validate(
-                    communication_endpoint, from_attributes=True
-                )
-                for communication_endpoint in communication_endpoints
-            ]
-        ).model_dump(mode="json"),
-    )
-
-
-@router.get(
-    "/{device_id}/communication-endpoints/primary", response_model=CommunicationEndpoint
-)
-async def get_primary_communication_endpoint(
-    device_id: UUID,
-    session: Session = get_session_dependency(),
-) -> JSONResponse:
-    """
-    Retrieve the primary communication endpoint for a device.
-
-    Returns the primary communication endpoint associated with the device.
-    Each device should have one primary endpoint for main communication.
-
-    Args:
-        device_id: UUID of the device.
-        session: Database session dependency.
-
-    Returns:
-        JSONResponse: Primary communication endpoint with HTTP 200 status,
-        or HTTP 404 if no primary endpoint exists.
-    """
-    communication_endpoint_repository = CommunicationEndpointRepository(session)
-    communication_endpoint = communication_endpoint_repository.get_primary_by_device_id(
-        device_id
-    )
-
-    if not communication_endpoint:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "message": "There is no primary communication endpoint for this device"
-            },
-        )
-
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=CommunicationEndpoint.model_validate(
-            communication_endpoint, from_attributes=True
-        ).model_dump(mode="json"),
     )

@@ -13,6 +13,15 @@ import uuid
 import pytest
 
 
+def _get_sample_device():
+    return DeviceCreate(
+        name="Test Device",
+        serial_number="1234567890",
+        brand="Test Brand",
+        model="Test Model",
+    )
+
+
 @pytest.fixture(scope="function")
 def session_fixture():
     """
@@ -26,12 +35,9 @@ def session_fixture():
     return session_gen, session
 
 
-def test_get_all_devices(session_fixture):
+def test_get_all_devices_empty(session_fixture):
     """
     Test that index() returns an empty list when no devices exist.
-
-    Verifies that the repository correctly handles the case when there are
-    no devices in the database.
     """
     _, session = session_fixture
 
@@ -43,19 +49,32 @@ def test_get_all_devices(session_fixture):
         session.close()
 
 
-def test_get_device_by_id(session_fixture):
+def test_get_all_devices_non_empty(session_fixture):
     """
-    Test that show() returns None for a non-existent device ID.
-
-    Verifies that the repository correctly returns None when attempting
-    to retrieve a device that does not exist in the database.
+    Test that index() returns a non-empty list when devices exist.
     """
     _, session = session_fixture
-    sample_uuid = uuid.uuid4()
 
     try:
         device_repository = DeviceRepository(session)
-        device = device_repository.show(sample_uuid)
+        device = device_repository.store(_get_sample_device())
+        devices = device_repository.index()
+        assert len(devices) == 1
+        assert devices[0].id == device.id
+    finally:
+        device_repository.destroy(device.id)
+        session.close()
+
+
+def test_get_device_by_id_non_existent(session_fixture):
+    """
+    Test that show() returns None for a non-existent device ID.
+    """
+    _, session = session_fixture
+
+    try:
+        device_repository = DeviceRepository(session)
+        device = device_repository.show(uuid.uuid4())
         assert device is None
     finally:
         session.close()
@@ -75,23 +94,17 @@ def test_create_device(session_fixture):
 
     try:
         device_repository = DeviceRepository(session)
-        device = device_repository.store(
-            DeviceCreate(
-                name="Test Device",
-                serial_number="1234567890",
-                brand="Test Brand",
-                model="Test Model",
-            )
-        )
+        device = device_repository.store(_get_sample_device())
 
         created_device = device_repository.show(device.id)
 
         assert created_device is not None
-        assert created_device.name == "Test Device"
-        assert created_device.serial_number == "1234567890"
-        assert created_device.brand == "Test Brand"
-        assert created_device.model == "Test Model"
+        assert created_device.name == _get_sample_device().name
+        assert created_device.serial_number == _get_sample_device().serial_number
+        assert created_device.brand == _get_sample_device().brand
+        assert created_device.model == _get_sample_device().model
     finally:
+        device_repository.destroy(device.id)
         session.close()
 
 
@@ -110,14 +123,7 @@ def test_update_device(session_fixture):
     try:
         device_repository = DeviceRepository(session)
 
-        device = device_repository.store(
-            DeviceCreate(
-                name="Test Device",
-                serial_number="1234567890",
-                brand="Test Brand",
-                model="Test Model",
-            )
-        )
+        device = device_repository.store(_get_sample_device())
         updated_device = device_repository.update(
             device.id,
             DeviceUpdate(
@@ -134,6 +140,7 @@ def test_update_device(session_fixture):
         assert updated_device.brand == "Updated Brand"
         assert updated_device.model == "Updated Model"
     finally:
+        device_repository.destroy(device.id)
         session.close()
 
 

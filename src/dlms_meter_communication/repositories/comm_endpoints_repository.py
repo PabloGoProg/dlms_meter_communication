@@ -12,35 +12,13 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
-
+from ..models.enums import Medium
 from ..models.communication_endpoint import CommunicationEndpoint
 from ..schemas.communication_endpoints import (
     CommunicationEndpointCreate,
     CommunicationEndpointUpdate,
 )
-
-
-class CommunicationEndpointNotFoundError(Exception):
-    """
-    Exception raised when a requested communication endpoint is not found.
-
-    This exception is raised when attempting to perform operations
-    on a communication endpoint that doesn't exist in the database.
-    """
-
-    pass
-
-
-class CommunicationEndpointPrimaryCannotBeDeletedError(Exception):
-    """
-    Exception raised when attempting to delete a primary communication endpoint.
-
-    This exception is raised when trying to delete a communication endpoint
-    that is marked as primary for a device. Primary endpoints must be
-    demoted before deletion.
-    """
-
-    pass
+from sqlalchemy.exc import NoResultFound, InvalidRequestError
 
 
 class CommunicationEndpointRepository:
@@ -189,6 +167,15 @@ class CommunicationEndpointRepository:
         device_id = data.device_id
         device_comm_endpoints = self.index_by_device_id(device_id)
 
+        if data.medium == Medium.TCP and (data.ip is None or data.port is None):
+            raise InvalidRequestError("IP and port are required for TCP communication")
+        if data.medium == Medium.SERIAL and (
+            data.serial_port is None or data.baud_rate is None
+        ):
+            raise InvalidRequestError(
+                "Serial port and baud rate are required for serial communication"
+            )
+
         if len(device_comm_endpoints) == 0:
             # If no communication endpoints for the device, set the first one as primary
             data.is_primary = True
@@ -236,7 +223,7 @@ class CommunicationEndpointRepository:
         entity = self.show(communication_endpoint_id)
 
         if not entity:
-            raise CommunicationEndpointNotFoundError(
+            raise NoResultFound(
                 f"Communication endpoint with id {communication_endpoint_id} not found"
             )
 
@@ -255,7 +242,8 @@ class CommunicationEndpointRepository:
             setattr(entity, key, value)
 
         self._session.add(entity)
-        self._session.commit()
+        self._session.flush()
+        self._session.refresh(entity)
         return entity
 
     def destroy(self, communication_endpoint_id: UUID) -> None:
@@ -279,16 +267,18 @@ class CommunicationEndpointRepository:
         entity = self.show(communication_endpoint_id)
 
         if not entity:
-            raise CommunicationEndpointNotFoundError(
+            raise NoResultFound(
                 f"Communication endpoint with id {communication_endpoint_id} not found"
             )
 
         # Prevent deletion of primary endpoints
         if entity.is_primary:
-            raise CommunicationEndpointPrimaryCannotBeDeletedError(
+            raise InvalidRequestError(
                 f"Communication endpoint with id {communication_endpoint_id} is primary and cannot be deleted. Please set another one as primary first."
             )
 
-        self._session.delete(entity)
-        self._session.commit()
-        return True
+        try:
+            self._session.delete(entity)
+            self._session.flush()
+        except Exception as e:
+            raise e
