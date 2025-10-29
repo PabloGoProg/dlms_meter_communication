@@ -61,11 +61,12 @@ class DeviceRepository:
         try:
             stmt = select(Device)
             stmt = stmt.order_by(
-                Device.created_at.desc() if order_desc else Device.created_at
+                Device.created_at.desc() if order_desc else Device.created_at.asc(),
             )
             stmt = stmt.offset(offset).limit(limit)
             devices = self._session.exec(stmt).all()
 
+            print("devices", [d.id for d in devices])
             return devices
         except Exception as e:
             raise e
@@ -119,12 +120,12 @@ class DeviceRepository:
             Device: The updated device entity.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise NoResultFound(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
         update_data = patch.model_dump(exclude_unset=True)
 
@@ -146,12 +147,12 @@ class DeviceRepository:
             device_id: UUID of the device to remove.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise NoResultFound(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
         self._session.delete(entity)
         self._session.flush()
@@ -168,12 +169,12 @@ class DeviceRepository:
             device_id: UUID of the device to destroy.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise NoResultFound(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
         try:
             self._session.delete(entity)

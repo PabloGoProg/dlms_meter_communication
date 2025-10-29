@@ -237,8 +237,8 @@ class CommunicationEndpointRepository:
 
             data.is_primary = True
 
-        # Update entity fields
-        for key, value in data.model_dump().items():
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
             setattr(entity, key, value)
 
         self._session.add(entity)
