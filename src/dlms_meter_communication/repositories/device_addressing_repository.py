@@ -17,7 +17,7 @@ from ..schemas import (
     DeviceAddressingCreate,
     DeviceAddressingUpdate,
 )
-from sqlalchemy.exc import NoResultFound, IntegrityError
+from sqlalchemy.exc import NoResultFound, InvalidRequestError
 
 
 class DeviceAddressingRepository:
@@ -85,7 +85,9 @@ class DeviceAddressingRepository:
             comm_endpoint = comm_endpoint_repository.show(endpoint_id)
 
             if comm_endpoint is None:
-                return None
+                raise NoResultFound(
+                    f"Communication endpoint with id {endpoint_id} not found"
+                )
 
             return [
                 DeviceAddressing(**device_addressing.model_dump())
@@ -131,7 +133,7 @@ class DeviceAddressingRepository:
         ).first()
 
         if already_exists:
-            raise IntegrityError(
+            raise InvalidRequestError(
                 statement=f"Device addressing already exists for endpoint {data.endpoint_id} with server address {server_address} and client address {client_address}"
             )
 
@@ -164,6 +166,12 @@ class DeviceAddressingRepository:
             DeviceAddressing: The updated device addressing entity.
         """
 
+        entity = self.show(device_addressing_id)
+        if entity is None:
+            raise NoResultFound(
+                f"Device addressing with id {device_addressing_id} not found"
+            )
+
         server_address, client_address = data.server_address, data.client_address
 
         already_exists = self._session.exec(
@@ -175,15 +183,8 @@ class DeviceAddressingRepository:
         ).first()
 
         if already_exists:
-            raise IntegrityError(
+            raise InvalidRequestError(
                 statement=f"Device addressing already exists for endpoint {data.endpoint_id} with server address {server_address} and client address {client_address}"
-            )
-
-        entity = self.show(device_addressing_id)
-
-        if entity is None:
-            raise NoResultFound(
-                f"Device addressing with id {device_addressing_id} not found"
             )
 
         update_data = data.model_dump(exclude_unset=True)
