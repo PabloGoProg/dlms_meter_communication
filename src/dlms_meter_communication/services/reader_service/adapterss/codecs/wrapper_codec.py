@@ -83,7 +83,7 @@ class WrapperCodec(IFrameCodec):
         if not payload:
             raise ValueError("Payload cannot be empty")
 
-        if self.is_wrapped(payload):
+        if self._is_wrapped(payload):
             # Skip encoding if already wrapped to avoid double-wrapping
             return payload
 
@@ -121,18 +121,18 @@ class WrapperCodec(IFrameCodec):
         if p_len == 0 or p_len > self._max_payload_length:
             raise ValueError(f"Invalid payload length: {p_len}")
 
-        t_len = 8 + p_len
-        if len(buffer) < t_len:
+        frame_len = 8 + p_len
+        if len(buffer) < frame_len:
             # Header present but payload incomplete
             return None, buffer
 
-        payload = buffer[8:t_len]
+        payload = buffer[8:frame_len]
         # Return remaining bytes if any, None if buffer fully consumed
-        remaining = buffer[t_len:] if len(buffer) > t_len else None
+        remaining = buffer[frame_len:] if len(buffer) > frame_len else None
         return payload, remaining
 
-    def is_wrapped(self, message: bytes) -> bool:
-        """Check if message already has a valid wrapper header.
+    def _is_wrapped(self, message: bytes) -> bool:
+        """Check if message already has a valid wrapper header.l
 
         Validates version, wPorts match configuration, and length matches
         message size.

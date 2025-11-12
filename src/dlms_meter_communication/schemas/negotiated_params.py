@@ -30,9 +30,9 @@ class NegotiatedParams(BaseModel):
         max_pdu: Maximum PDU (Protocol Data Unit) size.
     """
 
-    id: UUID
-    device_id: UUID
-    endpoint_id: UUID
+    id: Optional[UUID] = None
+    device_id: Optional[UUID] = None
+    endpoint_id: Optional[UUID] = None
     max_info_rx: Optional[int] = None
     max_info_tx: Optional[int] = None
     win: Optional[int] = None

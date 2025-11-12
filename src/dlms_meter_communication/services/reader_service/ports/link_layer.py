@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+
+from .frame_codec import IFrameCodec
+from .connection import IConnection
 from dlms_meter_communication.schemas.negotiated_params import NegotiatedParams
 
 
@@ -30,6 +33,22 @@ class ILinkLayer(ABC):
         - Implementations should be considered non–thread-safe unless stated
           otherwise. Coordinate concurrent access at a higher level (Session).
     """
+
+    def __init__(
+        self, codec: IFrameCodec, connection: IConnection, max_pdu_hint: int
+    ) -> None:
+        """
+        Initialize the link layer with a message codec to encode and decode frames
+        and a connection to send and receive frames.
+
+        Args:
+            codec: The message codec to use for encoding and decoding frames.
+            connection: The connection to send and receive frames.
+        """
+        self._codec = codec
+        self._connection = connection
+        self._max_pdu_hint = max_pdu_hint
+        self._rx_buffer = bytearray()
 
     @abstractmethod
     def negotiate(self, data: bytes) -> NegotiatedParams:

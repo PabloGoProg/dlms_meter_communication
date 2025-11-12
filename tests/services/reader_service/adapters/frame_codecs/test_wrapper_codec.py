@@ -146,14 +146,14 @@ def test_is_wrapped_valid_message_returns_true() -> None:
     payload = b"\x01\x02\x03\x04"
     header = struct.pack(">4H", 1, 16, 1, len(payload))
     wrapped = header + payload
-    assert codec.is_wrapped(wrapped) is True
+    assert codec._is_wrapped(wrapped) is True
 
 
 def test_is_wrapped_short_message_returns_false() -> None:
     """Test that is_wrapped returns False for messages shorter than 8 bytes."""
     codec = WrapperCodec(source_wport=16, destination_wport=1)
     short_message = b"\x01\x02\x03"
-    assert codec.is_wrapped(short_message) is False
+    assert codec._is_wrapped(short_message) is False
 
 
 def test_is_wrapped_invalid_version_returns_false() -> None:
@@ -161,7 +161,7 @@ def test_is_wrapped_invalid_version_returns_false() -> None:
     codec = WrapperCodec(source_wport=16, destination_wport=1)
     invalid_header = struct.pack(">4H", 2, 16, 1, 4)
     message = invalid_header + b"\x01\x02\x03\x04"
-    assert codec.is_wrapped(message) is False
+    assert codec._is_wrapped(message) is False
 
 
 def test_is_wrapped_invalid_ports_returns_false() -> None:
@@ -169,7 +169,7 @@ def test_is_wrapped_invalid_ports_returns_false() -> None:
     codec = WrapperCodec(source_wport=16, destination_wport=1)
     invalid_header = struct.pack(">4H", 1, 17, 1, 4)
     message = invalid_header + b"\x01\x02\x03\x04"
-    assert codec.is_wrapped(message) is False
+    assert codec._is_wrapped(message) is False
 
 
 def test_is_wrapped_length_mismatch_returns_false() -> None:
@@ -177,7 +177,7 @@ def test_is_wrapped_length_mismatch_returns_false() -> None:
     codec = WrapperCodec(source_wport=16, destination_wport=1)
     invalid_header = struct.pack(">4H", 1, 16, 1, 10)
     message = invalid_header + b"\x01\x02\x03\x04"
-    assert codec.is_wrapped(message) is False
+    assert codec._is_wrapped(message) is False
 
 
 def test_encode_decode_roundtrip() -> None:
