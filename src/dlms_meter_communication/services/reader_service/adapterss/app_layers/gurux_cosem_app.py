@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from ...ports import IAppLayer, IConnection
+from ...ports import IAppLayer
 
 from dataclasses import dataclass
 from typing import Any, Optional
 from gurux_dlms import GXDLMSClient, GXReplyData, GXByteBuffer, GXDLMSTranslator
 from gurux_dlms.enums import Authentication, InterfaceType
+from gurux_net import GXNet
 from gurux_common import ReceiveParameters
 
 from dlms_meter_communication.schemas import Device, NegotiatedParams
 
 
 class GuruxCOSEMApp(IAppLayer):
-    def __init__(
-        self, connection: IConnection, use_logical_name_referencing: bool = True
-    ):
-        self._connection = connection
+    def __init__(self, use_logical_name_referencing: bool = True):
+        self._media = None
         self._use_logical_name_referencing = use_logical_name_referencing
 
         self._gx_dlms_client = GXDLMSClient(
@@ -121,6 +120,9 @@ class GuruxCOSEMApp(IAppLayer):
 
                 if not params.eop:
                     params.count = self._gx_dlms_client.getFrameSize(buffer)
+
+            while not self._connection.receive(params):
+                pass
 
         except Exception:
             pass

@@ -12,7 +12,7 @@ class TCPWrapperLinkLayer(ILinkLayer):
     """Link layer implementation using TCP with DLMS Wrapper protocol."""
 
     def __init__(self, codec: IFrameCodec, connection: IConnection) -> None:
-        super().__init__(codec=codec, connection=connection)
+        super().__init__(codec=codec, connection=connection, max_pdu_hint=8 + 1024)
 
     def negotiate(self, data: bytes) -> NegotiatedParams:
         """Return negotiated parameters for TCP Wrapper protocol.

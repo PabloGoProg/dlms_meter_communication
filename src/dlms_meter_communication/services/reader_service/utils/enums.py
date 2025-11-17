@@ -1,6 +1,18 @@
 from enum import Enum
 
 
+class AppLayerProviderType(Enum):
+    """
+    Enumeration of available app layer provider types for DLMS meter communication.
+
+    This enum defines the different implementation providers that can be used
+    to handle the actual app layer establishment and data transmission.
+    """
+
+    COSEM_NATIVE = 1  # COSEM native app layer provider
+    GURUX_COSEM = 2  # Gurux COSEM app layer provider
+
+
 class CommunicationProfileType(Enum):
     """
     Enumeration of available communication profiles for DLMS meter communication.
