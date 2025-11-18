@@ -1,21 +1,54 @@
 from __future__ import annotations
 
 from ...ports import IAppLayer
+from datetime import datetime
 from typing import Any
 import time
+import os
 
 from gurux_dlms import (
     GXByteBuffer,
+    GXDLMSAccessItem,
     GXDLMSClient,
     GXReplyData,
     GXDLMSTranslator,
     GXDLMSException,
 )
-from gurux_dlms.enums import InterfaceType, Security, Conformance, Authentication
+from gurux_dlms.objects import (
+    GXDLMSData,
+    GXDLMSObject,
+    GXDLMSRegister,
+    GXDLMSExtendedRegister,
+    GXDLMSDemandRegister,
+    GXDLMSProfileGeneric,
+    GXDLMSSecuritySetup,
+    GXDLMSObjectCollection,
+)
+from gurux_dlms.enums import (
+    InterfaceType,
+    Security,
+    Conformance,
+    Authentication,
+    AssociationResult,
+    SourceDiagnostic,
+    DataType,
+    ObjectType,
+    AccessServiceCommandType,
+)
 from gurux_net import GXNet
-from gurux_common import ReceiveParameters, TimeoutException
+from gurux_common import GXCommon, ReceiveParameters, TimeoutException
 from gurux_common.io import Parity, StopBits
 from gurux_common.enums import TraceLevel
+from gurux_dlms.ecdsa.enums.Ecc import Ecc
+from gurux_dlms.objects.enums.CertificateType import CertificateType
+from gurux_dlms.asn.GXAsn1Converter import GXAsn1Converter
+from gurux_dlms.ecdsa.GXEcdsa import GXEcdsa
+from gurux_dlms.asn.GXPkcs8 import GXPkcs8
+from gurux_dlms.asn.GXPkcs10 import GXPkcs10
+from gurux_dlms.asn.GXx509Certificate import GXx509Certificate
+from gurux_dlms.asn.GXCertificateRequest import GXCertificateRequest
+from gurux_dlms.objects.enums.CertificateEntity import CertificateEntity
+from gurux_dlms.GXDLMSConverter import GXDLMSConverter
 
 from dlms_meter_communication.schemas import Device, NegotiatedParams
 
@@ -421,29 +454,957 @@ class GuruxCOSEMApp(IAppLayer):
                 time.sleep(1)
 
     def _update_frame_counter(self) -> None:
+        """
+        Synchronizes the invocation counter (frame counter) with the DLMS meter.
+
+        This method is critical for secure communication with DLMS meters that use
+        encryption. The invocation counter is an anti-replay security mechanism that
+        ensures each encrypted message has a unique, incrementally increasing counter.
+        Before establishing a secure connection, the client must synchronize its
+        invocation counter with the meter's current value to prevent replay attacks.
+
+        The method performs a temporary unsecured connection to read the current
+        invocation counter value from the meter, then updates the client's counter
+        to match. This process uses Public Client (address 16) with no authentication
+        to avoid the chicken-and-egg problem of needing a valid counter to establish
+        a secure connection in the first place.
+
+        The synchronization is only performed when:
+        - An invocation counter OBIS code is configured
+        - Ciphering is enabled
+        - Security level is not NONE
+
+        Raises:
+            Exception: If the temporary connection fails or the counter cannot be read.
+        """
+        # Only synchronize if invocation counter is configured and security is enabled
         if (
             self.invocation_counter
             and self.client.ciphering is not None
             and self.client.ciphering.security != Security.NONE
         ):
             self._initialize_optical_link()
+            # Enable general protection conformance for security operations
             self.client.proposedConformance |= Conformance.GENERAL_PROTECTION
 
+            # Backup current connection parameters that will be temporarily changed
             add = self.client.clientAddress
             auth = self.client.authentication
             security = self.client.ciphering.security
             challenge = self.client.ctoSChallenge
 
             try:
-                self.client.clientAddress = 16
+                # Temporarily switch to Public Client (address 16) with no security.
+                # This is necessary because we need to read the current invocation counter
+                # from the meter, but we can't establish a secure connection without already
+                # knowing the correct invocation counter value (chicken-and-egg problem).
+                self.client.clientAddress = 16  # Public Client address
                 self.client.authentication = Authentication.NONE
                 self.client.ciphering.security = Security.NONE
 
                 reply = GXReplyData()
+                # SNRM (Set Normal Response Mode): Initialize HDLC layer connection
                 data = self.client.snrmRequest()
 
                 if data:
                     self._read_dlms_packet(data, reply)
-                    self.client.parseUAResponse(reply.data
+                    # Parse UA (Unnumbered Acknowledgment) response to get HDLC parameters
+                    self.client.parseUAResponse(reply.data)
+                    # Resize reply buffer based on negotiated maximum frame size
+                    size = self.client.hdlcSettings.maxInfoTX + 40
+                    self.reply_buff = bytearray(size)
+
+                reply.clear()
+                # AARQ (Association Request): Establish application layer association
+                self._read_data_block(self.client.aarqRequest(), reply)
+                self.client.parseUAResponse(reply.data)
+                reply.clear()
+
+                # Read the current invocation counter value from the meter.
+                # The invocation counter is stored as a DLMS Data object at the configured OBIS code.
+                # Attribute index 2 contains the actual counter value.
+                d = GXDLMSData(self.invocation_counter)
+                self._read(d, 2)
+                # Update client's invocation counter to meter's value + 1.
+                # We add 1 because the next secure message we send must have a counter
+                # higher than the meter's current value.
+                self.client.ciphering.invocationCounter = 1 + d.value
+
+                # Close the temporary unsecured connection
+                self.disconnect()
             finally:
-                pass
+                # Always restore original connection parameters, even if an error occurred.
+                # This ensures the client is configured correctly for the subsequent secure connection.
+                self.client.clientAddress = add
+                self.client.authentication = auth
+                self.client.ciphering.security = security
+                self.client.ctoSChallenge = challenge
+
+    def _initialize_connection(self):
+        """
+        Establishes a complete DLMS connection with the meter, including all protocol layers.
+
+        This method orchestrates the full connection establishment sequence for DLMS/COSEM
+        communication. It handles both the physical/data link layer initialization (HDLC)
+        and the application layer association (COSEM), with support for secure encrypted
+        connections and various authentication levels.
+
+        The connection process follows these phases:
+        1. Security preparation: Synchronizes invocation counter if encryption is enabled
+        2. Physical layer: Initializes optical link if required (Mode E)
+        3. Data link layer: Establishes HDLC connection using SNRM/UA exchange
+        4. Application layer: Creates COSEM association using AARQ/AARE exchange
+        5. Authentication: Performs additional authentication challenge if required
+
+        The method automatically adjusts the connection parameters based on the configured
+        authentication level and security settings, supporting scenarios from unsecured
+        public client access to fully encrypted and authenticated connections.
+
+        Raises:
+            GXDLMSException: If association is rejected or authentication fails.
+            Exception: If any phase of the connection establishment fails.
+        """
+        # If security is enabled, print cryptographic parameters for debugging/auditing.
+        # This helps verify that the correct keys and security settings are being used.
+        if self.client.ciphering.security != Security.NONE:
+            print("Security Suite: " + str(self.client.ciphering.securitySuite))
+            print("Security: " + str(self.client.ciphering.security))
+            print("System title: " + GXCommon.toHex(self.client.ciphering.systemTitle))
+            print(
+                "Authentication key: "
+                + GXCommon.toHex(self.client.ciphering.authenticationKey)
+            )
+            print(
+                "Block cipher key: "
+                + GXCommon.toHex(self.client.ciphering.blockCipherKey)
+            )
+            if self.client.ciphering.dedicatedKey:
+                print(
+                    "Dedicated key: "
+                    + GXCommon.toHex(self.client.ciphering.dedicatedKey)
+                )
+
+        # Phase 1: Synchronize invocation counter for encrypted communication.
+        # Must be done before establishing the secure connection to avoid replay attacks.
+        self._update_frame_counter()
+
+        # Phase 2: Initialize optical link if using Mode E (IEC 62056-21).
+        # This negotiates baud rate and configures the serial port for optical communication.
+        self._initialize_optical_link()
+
+        reply = GXReplyData()
+        # Phase 3: HDLC Data Link Layer Initialization
+        # SNRM (Set Normal Response Mode) establishes the HDLC connection and negotiates
+        # parameters like maximum frame size, window size, etc.
+        snrm = self.client.snrmRequest()
+
+        if snrm:
+            self._read_dlms_packet(snrm, reply)
+            # UA (Unnumbered Acknowledgment) contains negotiated HDLC parameters
+            self.client.parseUAResponse(reply.data)
+            # Allocate reply buffer based on negotiated maximum transmission size.
+            # Adding 40 bytes for protocol overhead (headers, checksums, etc.)
+            size = self.client.hdlcSettings.maxInfoTX + 40
+            self.replyBuff = bytearray(size)
+
+        reply.clear()
+        # Phase 4: COSEM Application Layer Association
+        # AARQ (Association Request) initiates the application-level association.
+        # This is where authentication type and conformance blocks are negotiated.
+        self.readDataBlock(self.client.aarqRequest(), reply)
+        # AARE (Association Response) contains the meter's response, including
+        # accepted conformance, authentication result, and any error diagnostics.
+        self.client.parseAareResponse(reply.data)
+        reply.clear()
+
+        # Phase 5: High-Level Authentication (if required)
+        # For authentication levels above LOW (e.g., HIGH, HIGH_GMAC, HIGH_ECDSA),
+        # an additional challenge-response authentication exchange is required.
+        if self.client.authentication > Authentication.LOW:
+            try:
+                # Send authentication challenge and receive response.
+                # This typically involves cryptographic operations to prove identity.
+                for item in self.client.getApplicationAssociationRequest():
+                    self._read_dlms_packet(item, reply)
+                self.client.parseApplicationAssociationResponse(reply.data)
+            except GXDLMSException:
+                # If authentication fails, wrap the exception with proper diagnostic codes
+                # to indicate permanent rejection due to authentication failure.
+                raise GXDLMSException(
+                    AssociationResult.PERMANENT_REJECTED,
+                    SourceDiagnostic.AUTHENTICATION_FAILURE,
+                )
+
+    def _read(self, item, attribute_index):
+        """
+        Reads a single attribute from a DLMS object.
+
+        This is the basic read operation for DLMS/COSEM objects. It generates a read
+        request for a specific attribute of an object, sends it to the meter, receives
+        the response, and updates the object with the returned value.
+
+        Args:
+            item: The DLMS object to read from (e.g., GXDLMSData, GXDLMSRegister).
+            attribute_index (int): The attribute index to read (e.g., 2 for value).
+
+        Returns:
+            The updated value that was read from the meter.
+        """
+        # Generate DLMS read request packet for the specific attribute
+        data = self.client.read(item, attribute_index)
+        reply = GXReplyData()
+
+        # Send request and receive response (handles multi-frame if needed)
+        self._read_data_block(data, reply)
+        # If data type is unknown (NONE), infer it from the response.
+        # This is useful for dynamic object discovery where types aren't known beforehand.
+        if item.getDataType(attribute_index) == DataType.NONE:
+            item.setDataType(attribute_index, reply.valueType)
+
+        # Parse the response data and update the object's attribute value
+        return self.client.updateValue(item, attribute_index, reply.data)
+
+    def _read_list(self, _list):
+        """
+        Reads multiple attributes from multiple objects in a single operation.
+
+        This method uses the DLMS "Read Multiple" service to efficiently read several
+        attributes in one request-response cycle, reducing communication overhead compared
+        to individual reads. This requires the meter to support MULTIPLE_REFERENCES
+        conformance.
+
+        Args:
+            _list (list): List of tuples (object, attribute_index) to read.
+                Example: [(register1, 2), (register2, 2), (data1, 2)]
+
+        Raises:
+            ValueError: If the number of returned values doesn't match the request count.
+        """
+        # Generate read request for multiple items (single DLMS packet or sequence)
+        data = self.client.readList(_list)
+        reply = GXReplyData()
+        values = list()
+
+        # Process each packet in the response sequence
+        for item in data:
+            self._read_data_block(item, reply)
+            # Accumulate all returned values from the response
+            if reply.value:
+                values.extend(reply.value)
+
+            # Clear reply for next iteration to prevent data mixing
+            reply.clear()
+
+        # Validate that we received exactly as many values as requested.
+        # Mismatch indicates protocol error or incomplete response.
+        if len(values) != len(_list):
+            raise ValueError("Invalid Reply: Read items count mismatch.")
+
+        # Update all objects with their corresponding values
+        self.client.updateValue(_list, values)
+
+    def _write(self, item, attribute_index):
+        """
+        Writes a value to a single attribute of a DLMS object.
+
+        This is the basic write operation for DLMS/COSEM objects. It generates a write
+        request with the object's current value and sends it to the meter. The object's
+        value must be set before calling this method.
+
+        Args:
+            item: The DLMS object to write to (e.g., GXDLMSData, GXDLMSRegister).
+            attribute_index (int): The attribute index to write (typically 2 for value).
+        """
+        # Generate DLMS write request packet with the object's current value
+        data = self.client.write(item, attribute_index)
+        # Send write request. Write operations typically don't return data,
+        # only acknowledgment of success/failure.
+        self._read_dlms_packet(data)
+
+    def _read_rows_by_entry(self, pg, index: int, count: int):
+        """
+        Reads rows from a profile generic (load profile) by entry index.
+
+        Profile Generic objects store time-series data (like load profiles, event logs).
+        This method retrieves a specific range of entries by their sequential index number.
+        Entry 1 is the oldest entry, and the highest index is the most recent.
+
+        Args:
+            pg: The Profile Generic object to read from.
+            index (int): Starting entry index (1-based).
+            count (int): Number of entries to read.
+
+        Returns:
+            The profile data buffer containing the requested entries.
+        """
+        if not pg:
+            raise ValueError("Profile Generic object is required.")
+        if index <= 0:
+            raise ValueError("Starting entry index must be greater than 0.")
+        if count <= 0:
+            raise ValueError("Number of entries to read must be greater than 0.")
+
+        # Generate request to read entries by index range
+        data = self.client.readRowsByEntry(pg, index, count)
+        reply = GXReplyData()
+        self._read_data_block(data, reply)
+        # Update the profile generic's buffer (attribute 2) with the returned entries
+        return self.client.updateValue(pg, 2, reply.value)
+
+    def _read_rows_by_range(self, pg, start: datetime, end: datetime):
+        """
+        Reads rows from a profile generic (load profile) by time range.
+
+        This method retrieves entries from a profile based on timestamp range rather than
+        entry index. This is useful for reading data within a specific time period
+        (e.g., "all data from yesterday").
+
+        Args:
+            pg: The Profile Generic object to read from.
+            start (datetime): Start timestamp of the range.
+            end (datetime): End timestamp of the range.
+
+        Returns:
+            The profile data buffer containing entries within the time range.
+        """
+        if not pg:
+            raise ValueError("Profile Generic object is required.")
+        if start is None or end is None:
+            raise ValueError("Start and end timestamps are required.")
+        if start > end:
+            raise ValueError("Start timestamp must be before end timestamp.")
+
+        reply = GXReplyData()
+        # Generate request to read entries by timestamp range
+        data = self.client.readRowsByRange(pg, start, end)
+        self._read_data_block(data, reply)
+        # Update the profile generic's buffer (attribute 2) with the returned entries
+        return self.client.updateValue(pg, 2, reply.value)
+
+    def _read_by_access(self, list_):
+        """
+        Reads multiple attributes using the DLMS Access service.
+
+        The Access service is a more advanced method for reading multiple attributes that
+        provides better control and error handling compared to Read Multiple. Each item
+        can specify different access types (GET, SET, ACTION). Requires the meter to
+        support ACCESS conformance.
+
+        This method is typically used as a fallback or for advanced scenarios where
+        Read Multiple is not available or doesn't meet the requirements.
+
+        Args:
+            list_ (list): List of GXDLMSAccessItem objects specifying what to read.
+                Each item contains: access type, object, and attribute index.
+        """
+        if list_:
+            reply = GXReplyData()
+            # Generate access request with the list of items.
+            # First parameter (None) is for data to write; we're only reading here.
+            data = self.client.accessRequest(None, list_)
+            self._read_data_block(data, reply)
+            # Parse access response and update each object with its returned value.
+            # This handles per-item success/error status from the meter.
+            self.client.parseAccessResponse(list_, reply.data)
+
+    def _read_scaler_and_units(self):
+        """
+        Reads scaler and unit information for all register objects from the meter.
+
+        This method retrieves the scaler (scale factor) and unit of measurement for all
+        register-type objects (Register, Extended Register, and Demand Register) discovered
+        in the meter. Scalers and units are essential for correctly interpreting raw values
+        from registers (e.g., converting 12345 with scaler -2 to 123.45 kWh).
+
+        The method implements a cascading fallback strategy to maximize compatibility:
+        1. Try Access service (most efficient, best error handling)
+        2. If Access fails, try Multiple References (efficient batch read)
+        3. If Multiple References fails, fall back to individual reads (slowest but universal)
+
+        This automatic fallback ensures the method works with meters of varying capabilities,
+        from modern meters with full conformance support to legacy meters with limited features.
+
+        Attribute indices read:
+        - Register/ExtendedRegister: Attribute 3 (scaler_unit)
+        - DemandRegister: Attribute 4 (scaler_unit for demand registers)
+
+        The method silently handles failures, printing warnings but not raising exceptions,
+        to allow partial success when some registers are inaccessible.
+        """
+        # Get all register-type objects from the client's object list.
+        # These are objects that store measured values with associated scalers and units.
+        objs = self.client.objects.getObjects(
+            [
+                ObjectType.REGISTER,
+                ObjectType.EXTENDED_REGISTER,
+                ObjectType.DEMAND_REGISTER,
+            ]
+        )
+
+        _list = list()
+
+        # Strategy 1: Try Access service (preferred method)
+        # Access service provides the best error handling and flexibility.
+        try:
+            # Check if meter supports Access service via negotiated conformance
+            if self.client.negotiatedConformance & Conformance.ACCESS != 0:
+                for item in objs:
+                    # Regular and Extended Registers store scaler_unit in attribute 3
+                    if isinstance(item, (GXDLMSRegister, GXDLMSExtendedRegister)):
+                        if item.canRead(3):  # Verify read permissions
+                            _list.append(
+                                GXDLMSAccessItem(AccessServiceCommandType.GET, item, 3)
+                            )
+                    # Demand Registers store scaler_unit in attribute 4
+                    elif isinstance(item, (GXDLMSDemandRegister)):
+                        if item.canRead(4):  # Verify read permissions
+                            _list.append(
+                                GXDLMSAccessItem(AccessServiceCommandType.GET, item, 4)
+                            )
+
+                self._read_by_access(_list)
+        except Exception:
+            # Access service failed. This is not critical; we'll try other methods.
+            print("Failed to read scaler and units with access service.")
+
+        # Strategy 2: Try Multiple References (fallback method)
+        # Multiple References allows batch reading but with less granular error handling.
+        try:
+            # Check if meter supports Multiple References via negotiated conformance
+            if self.client.negotiatedConformance & Conformance.MULTIPLE_REFERENCES != 0:
+                for item in objs:
+                    # Regular and Extended Registers: attribute 3
+                    if isinstance(item, (GXDLMSRegister, GXDLMSExtendedRegister)):
+                        if item.canRead(3):
+                            _list.append((item, 3))
+                    # Demand Registers: attribute 4
+                    elif isinstance(item, (GXDLMSDemandRegister,)):
+                        if item.canRead(4):
+                            _list.append((item, 4))
+
+                self._read_list(_list)
+        except Exception:
+            # Multiple References failed. Disable this conformance flag to prevent
+            # future attempts and force fallback to individual reads.
+            self.client.negotiatedConformance &= ~Conformance.MULTIPLE_REFERENCES
+
+        # Strategy 3: Individual reads (last resort fallback)
+        # This is the slowest method but guaranteed to work on all meters.
+        # Only executed if Multiple References is not supported or has failed.
+        if self.client.negotiatedConformance & Conformance.MULTIPLE_REFERENCES == 0:
+            for item in objs:
+                try:
+                    # Read each register's scaler_unit individually
+                    if isinstance(item, (GXDLMSRegister,)):
+                        if item.canRead(3):
+                            self._read(item, 3)
+                    elif isinstance(item, (GXDLMSDemandRegister,)):
+                        if item.canRead(4):
+                            self._read(item, 4)
+                except Exception:
+                    # Silently ignore individual read failures. Some registers may be
+                    # inaccessible due to permissions or meter state, but we want to
+                    # read as many as possible.
+                    pass
+
+    def _get_profile_generic_cols(self):
+        """
+        Reads capture object definitions from all profile generic objects.
+
+        Profile Generic objects store time-series data. Attribute 3 contains the capture
+        objects list, which defines what data is stored in each column of the profile
+        (e.g., timestamp, voltage, current). This metadata is required to correctly
+        interpret the profile data rows.
+
+        The method silently handles read failures to allow partial success when some
+        profiles are inaccessible.
+        """
+        # Retrieve all Profile Generic objects from the meter's object list
+        profile_generics = self.client.objects.getObjects(ObjectType.PROFILE_GENERIC)
+
+        for pg in profile_generics:
+            try:
+                # Attribute 3 contains the capture_objects list (column definitions)
+                if pg.canRead(3):
+                    self._read(pg, 3)
+            except Exception as e:
+                print(f"Error reading profile generic: {e}")
+
+    def _get_read_out(self):
+        """
+        Reads all readable attributes from all objects in the meter's object list.
+
+        This method performs a comprehensive read-out of the meter, retrieving values
+        from all accessible attributes of all DLMS objects (excluding Profile Generic
+        objects, which are handled separately). It automatically identifies which
+        attributes need to be read and displays their values.
+
+        Errors are caught per attribute to allow continuing with remaining attributes
+        even if some fail.
+        """
+        for item in self.client.objects:
+            # Skip base GXDLMSObject instances (abstract, no readable attributes)
+            if type(item) is GXDLMSObject:
+                continue
+            # Skip Profile Generic objects (handled separately by _get_profile_generic_data)
+            elif isinstance(item, GXDLMSProfileGeneric):
+                continue
+
+            # Get list of attribute indices that should be read for this object type
+            for pos in item.getAttributeIndexToRead(True):
+                try:
+                    if item.canRead(pos):
+                        val = self._read(item, pos)
+                        self._show_value(pos, val)
+                    else:
+                        print("Cannot read attribute")
+                except Exception as e:
+                    print("Error! Index: " + str(pos) + " " + str(e))
+
+    def _show_value(self, pos, val):
+        """
+        Formats and displays an attribute value in a human-readable format.
+
+        Args:
+            pos (int): The attribute index being displayed.
+            val: The value to display. Can be of any type (bytes, list, scalar, etc.).
+
+        Returns:
+            The formatted value (modified for display purposes).
+        """
+        # Convert binary data to hex representation for readability
+        if isinstance(val, (bytes, bytearray)):
+            val = GXByteBuffer(val)
+        # Format lists as comma-separated values, with hex encoding for binary items
+        elif isinstance(val, list):
+            _str = ""
+
+            for item in val:
+                if _str:
+                    _str += ", "
+
+                if isinstance(item, bytes):
+                    _str += GXByteBuffer.hex(item)
+                else:
+                    _str += str(item)
+
+            val = _str
+
+        print(f"Attribute {pos}: {val}")
+        return val
+
+    def _get_profile_generic_data(self):
+        """
+        Reads and displays time-series data from all profile generic objects.
+
+        Profile Generic objects store load profiles, event logs, and other time-series
+        data. This method retrieves today's data from each profile and displays it in
+        a tabular format. It first checks how many entries are available, then attempts
+        to read the data using time range filtering.
+
+        Returns:
+            list: The last successfully read profile data (cells from last profile).
+        """
+        cells = []
+        profile_generics = self.client.objects.getObjects(ObjectType.PROFILE_GENERIC)
+
+        for pg in profile_generics:
+            # Attribute 7: entries_in_use (current number of stored entries)
+            entries_in_use = self._read(pg, 7)
+            # Attribute 8: profile_entries (maximum capacity)
+            entires = self._read(pg, 8)
+
+            print(f"Entires: {entries_in_use} / {entires}")
+
+            # Skip empty profiles or profiles without capture object definitions
+            if entries_in_use == 0 or not pg.captureObjects:
+                continue
+
+            # Test read first entry to verify profile is accessible
+            try:
+                _ = self._read_rows_by_entry(pg, 1, 1)
+            except Exception:
+                print("Error reading profile generic first entry")
+
+            # Read today's data using time range (00:00:00 to 23:59:59)
+            try:
+                start = datetime.now()
+                end = start
+
+                # Set time range to cover entire current day
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+                cells = self._read_rows_by_range(pg, start, end)
+
+                # Display each row in pipe-separated format
+                for rows in cells:
+                    row = ""
+                    for cell in rows:
+                        if row:
+                            row += " | "
+                        # Convert binary data to hex for display
+                        if isinstance(cell, bytearray):
+                            row += GXByteBuffer.hex(cell)
+                        else:
+                            row += str(cell)
+                    print(row)
+
+            except Exception:
+                print("Error reading profile generic data")
+
+        return cells
+
+    def _get_association_view(self):
+        """
+        Retrieves the association view (object list) from the meter.
+
+        The association view is a comprehensive list of all DLMS objects available in
+        the meter, including their OBIS codes, object types, and access rights. This
+        information is essential for discovering what data and functionality the meter
+        provides.
+
+        For Short Name (SN) referencing meters, this method also attempts to read
+        extended access rights information if available.
+        """
+        reply = GXReplyData()
+        # Request the object list from the association object
+        self._read_data_block(self.client.getObjectsRequest(), reply)
+        # Parse the object list and populate the client's object collection
+        self.client.parseObjects(reply.data, True, False)
+
+        # For Short Name referencing, attempt to read detailed access rights
+        if not self.client.useLogicalNameReferencing:
+            # 0xFA00 is the standard SN for the association object
+            sn = self.client.objects.findBySN(0xFA00)
+
+            if sn and sn.version > 0:
+                try:
+                    # Attribute 3 contains extended access rights information
+                    self._read(sn, 3)
+                except Exception:
+                    print("Access rights not implemented for the meter.")
+
+    def _generate_certificates(self, logical_name: str):
+        """
+        Generates and exchanges security certificates with the meter for encrypted communication.
+
+        This method implements the complete certificate management workflow for DLMS meters
+        using ECDSA public key cryptography. It generates client and server certificates,
+        exchanges them with the meter, and verifies the import/export operations.
+
+        The process includes:
+        1. Generate client key pair and certificate signing request
+        2. Request meter to generate its own key pairs
+        3. Obtain signed certificates from certificate authority
+        4. Import certificates into meter
+        5. Export and verify all certificates
+
+        Args:
+            logical_name (str): OBIS code of the Security Setup object (e.g., "0.0.43.0.0.255").
+
+        Raises:
+            Exception: If authentication level is insufficient or certificate operations fail.
+        """
+        certificates = []
+
+        if not os.path.exists("Keys"):
+            os.mkdir("Keys")
+        if not os.path.exists("Certificates"):
+            os.mkdir("Certificates")
+        if not os.path.exists("Keys384"):
+            os.mkdir("Keys384")
+        if not os.path.exists("Certificates384"):
+            os.mkdir("Certificates384")
+
+        # Certificate operations require high-level authentication to prevent unauthorized changes
+        if self.client.authentication == Authentication.NONE:
+            raise Exception(
+                "High Authentication level required to change certificate keys"
+            )
+
+        reply = GXReplyData()
+        self._initialize_connection()
+        # Security Setup object manages certificates and cryptographic keys
+        security_setup = GXDLMSSecuritySetup(logical_name)
+
+        certifications = []
+
+        # Read security attributes: security policy, security suite, and certificates
+        self._read(security_setup, 3)
+        self._read(security_setup, 4)
+        self._read(security_setup, 5)
+
+        client_system_title = security_setup.clientSystemTitle
+
+        # Validate client system title (must be 8 bytes). Use cipher system title as fallback.
+        if len(client_system_title) != 8:
+            client_system_title = self.client.ciphering.systemTitle
+
+        # Step 1: Generate client-side key pair and certificate signing request
+        subject = GXAsn1Converter.systemTitleToSubject(client_system_title)
+        key_pair = GXEcdsa.generateKeyPair(Ecc.P256)
+        key = GXPkcs8(key_pair)
+        # Save private key to file for future use
+        key.save(
+            GXPkcs8.getFilePath(
+                Ecc.P256, CertificateType.DIGITAL_SIGNATURE, client_system_title
+            )
+        )
+
+        # Create PKCS#10 certificate signing request for digital signature certificate
+        pkc10 = GXPkcs10.createCertificateSigningRequest(key_pair, subject)
+        certifications.append(
+            GXCertificateRequest(CertificateType.DIGITAL_SIGNATURE, pkc10)
+        )
+
+        # Step 2: Request meter to generate its digital signature key pair
+        if not self._read_data_block(
+            security_setup.generateKeyPair(
+                self.client, CertificateType.DIGITAL_SIGNATURE
+            ),
+            reply,
+        ):
+            raise GXDLMSException(reply.error)
+        reply.clear()
+
+        # Step 3: Request meter to generate certificate signing request for digital signature
+        if not self._read_data_block(
+            security_setup.generateCertificate(
+                self.client, CertificateType.DIGITAL_SIGNATURE
+            ),
+            reply,
+        ):
+            raise GXDLMSException(reply.error)
+
+        # Parse meter's certificate request and validate system title
+        pkc10 = GXPkcs10(reply.value)
+        subject = GXAsn1Converter.systemTitleToSubject(security_setup.serverSystemTitle)
+
+        # Verify that the meter's certificate request contains the correct system title
+        if pkc10.subject.find(subject) == -1:
+            raise Exception(
+                "Server System Title "
+                + GXCommon.toHex(security_setup.serverSystemTitle)
+                + " is not the same as in the generated certificate request: "
+                + GXAsn1Converter.hexSystemTitleFromSubject(pkc10.subject)
+                + "."
+            )
+
+        certifications.append(
+            GXCertificateRequest(CertificateType.DIGITAL_SIGNATURE, pkc10)
+        )
+        reply.clear()
+
+        # Step 4: Request meter to generate certificate signing request for key agreement
+        if not self._read_data_block(
+            security_setup.generateCertificate(
+                self.client, CertificateType.KEY_AGREEMENT
+            ),
+            reply,
+        ):
+            raise GXDLMSException(reply.error)
+
+        # Parse and validate key agreement certificate request
+        pkc10 = GXPkcs10(reply.value)
+
+        if pkc10.subject.find(subject) == -1:
+            raise Exception(
+                "Server system title "
+                + GXDLMSTranslator.toHex(security_setup.serverSystemTitle)
+                + " is not the same as in the generated certificate request "
+                + GXAsn1Converter.hexSystemTitleFromSubject(pkc10.subject)
+                + ".",
+            )
+
+        certifications.append(
+            GXCertificateRequest(CertificateType.KEY_AGREEMENT, pkc10)
+        )
+        reply.clear()
+
+        # Step 5: Send all certificate requests to CA and obtain signed certificates
+        address = "https://certificates.gurux.fi/api/CertificateGenerator"
+        certificates = GXPkcs10.getCertificate(address, certifications)
+
+        # Step 6: Import all signed certificates into the meter
+        for cert in certificates:
+            if not self._read_data_block(
+                security_setup.importCertificate(self.client, cert), reply
+            ):
+                raise GXDLMSException(reply.error)
+
+            reply.clear()
+
+        # Step 7: Export certificates by entity (client/server) and verify they match
+        for cert in certificates:
+            # Determine if this certificate belongs to server or client based on system title
+            if (
+                cert.subject.find(
+                    GXAsn1Converter.systemTitleToSubject(
+                        security_setup.serverSystemTitle
+                    )
+                )
+                != -1
+            ):
+                st = security_setup.serverSystemTitle
+                entity = CertificateEntity.SERVER
+            elif (
+                cert.subject.find(
+                    GXAsn1Converter.systemTitleToSubject(client_system_title)
+                )
+                != -1
+            ):
+                st = client_system_title
+                entity = CertificateEntity.CLIENT
+            else:
+                continue
+
+            # Export certificate from meter and verify it matches the imported one
+            if not self._read_data_block(
+                security_setup.exportCertificateByEntity(
+                    self.client,
+                    entity,
+                    GXDLMSConverter.keyUsageToCertificateType(cert.keyUsage),
+                    st,
+                ),
+                reply,
+            ):
+                raise GXDLMSException(reply.error)
+
+            exported_cert = GXx509Certificate(reply.value)
+
+            if exported_cert != cert:
+                raise Exception(
+                    "Exported certificate does not match the generated certificate."
+                )
+
+            reply.clear()
+
+        # Step 8: Export certificates by serial number and verify (alternative verification method)
+        for cert in certificates:
+            if not self._read_data_block(
+                security_setup.exportCertificateBySerial(
+                    self.client, cert.serialNumber, cert.issuerRaw
+                ),
+                reply,
+            ):
+                raise GXDLMSException(reply.error)
+
+            exported = GXx509Certificate(reply.value)
+
+            if exported != cert:
+                raise Exception(
+                    "Exported certificate does not match the generated certificate."
+                )
+            reply.clear()
+
+    def _export_meter_certificates(self, logical_name: str):
+        """
+        Exports all certificates stored in the meter and saves them to files.
+
+        This method reads the meter's certificate list and exports each certificate
+        to the local filesystem for backup or inspection purposes. Certificates are
+        saved using a standardized file naming convention based on their attributes.
+
+        Args:
+            logical_name (str): OBIS code of the Security Setup object (e.g., "0.0.43.0.0.255").
+
+        Raises:
+            GXDLMSException: If certificate export operations fail.
+        """
+        try:
+            security_setup = GXDLMSSecuritySetup(logical_name)
+
+            # Read certificate-related attributes from the Security Setup object
+            self._read(security_setup, 3)
+
+            if not os.path.exists("Keys"):
+                os.mkdir("Keys")
+            if not os.path.exists("Certificates"):
+                os.mkdir("Certificates")
+            if not os.path.exists("Keys384"):
+                os.mkdir("Keys384")
+            if not os.path.exists("Certificates384"):
+                os.mkdir("Certificates384")
+
+            self._read(security_setup, 4)
+            self._read(security_setup, 5)
+
+            reply = GXReplyData()
+
+            # Export each certificate from the meter and save to file
+            for item in security_setup.certificates:
+                reply.clear()
+
+                # Request certificate export using serial number and issuer as identifier
+                if not self._read_data_block(
+                    security_setup.exportCertificateBySerial(
+                        self.client, item.serialNumber, item.issuerRaw
+                    ),
+                    reply,
+                ):
+                    raise GXDLMSException(reply.error)
+
+                # Parse certificate and save to filesystem
+                certificate = GXx509Certificate(reply.value)
+                path = GXx509Certificate.getFilePath(certificate)
+                certificate.save(path)
+        finally:
+            self.disconnect()
+
+    def _read_all(self, output: str):
+        """
+        Performs a complete read-out of all meter data and optionally caches object definitions.
+
+        This is the main orchestration method that coordinates a full meter read operation.
+        It establishes the connection, discovers or loads the meter's object list, reads
+        all object metadata (scalers, units, profile definitions), and retrieves all
+        available data values.
+
+        The method supports caching the object list to a file, which can significantly
+        speed up subsequent reads by skipping the discovery phase. If a cache file exists,
+        it loads the object definitions from there; otherwise, it performs full discovery.
+
+        Args:
+            output (str): File path for caching object definitions. If provided and exists,
+                objects are loaded from cache. After reading, updated objects are saved
+                back to this file.
+
+        Raises:
+            KeyboardInterrupt: User interruption is propagated after cleanup.
+            SystemExit: System exit is propagated after cleanup.
+        """
+        try:
+            read = False
+            self._initialize_connection()
+
+            # Attempt to load cached object definitions if available
+            if output and os.path.exists(output):
+                try:
+                    content = GXDLMSObjectCollection.load(output)
+                    self.client.objects.extend(content)
+
+                    if self.client.objects:
+                        read = True
+                except Exception:
+                    read = False
+
+            # If cache not available or loading failed, perform full discovery
+            if not read:
+                self._get_association_view()
+                self._read_scaler_and_units()
+                self._get_profile_generic_cols()
+
+            # Read all object values and profile data
+            self._get_read_out()
+            self._get_profile_generic_data()
+
+            # Save updated object definitions to cache file
+            if output:
+                self.client.objects.save(output)
+        except (KeyboardInterrupt, SystemExit):
+            # Clean up media on user interruption before propagating exception
+            self.media = None
+            raise
+        finally:
+            self.disconnect()
