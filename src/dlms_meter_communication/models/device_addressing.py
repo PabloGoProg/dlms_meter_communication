@@ -17,10 +17,10 @@ class DeviceAddressing(SQLModel, table=True):
             PGUUID(as_uuid=True), primary_key=True, default=text("gen_random_uuid()")
         ),
     )
-    endpoint_id: UUID = Field(
+    device_id: UUID = Field(
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("comm_endpoints.id", ondelete="CASCADE"),
+            ForeignKey("devices.id", ondelete="CASCADE"),
             nullable=False,
         )
     )

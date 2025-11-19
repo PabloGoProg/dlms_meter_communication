@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-from .enums import Medium, Profile
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
-from sqlmodel import Field, SQLModel, Boolean
+from sqlmodel import Field, SQLModel, Boolean, Relationship
+from .enums import Medium, Profile
 from sqlalchemy import (
     Column,
     text,
@@ -16,6 +14,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, ENUM as PGENUM, INET
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from .device import Device
 
 
 class CommunicationEndpoint(SQLModel, table=True):
@@ -89,6 +90,8 @@ class CommunicationEndpoint(SQLModel, table=True):
         default=False,
         sa_column=Column(Boolean, nullable=False, default=False),
     )
+
+    device: Optional["Device"] = Relationship(back_populates="communication_endpoints")
 
     created_at: datetime = Field(
         sa_column=Column(

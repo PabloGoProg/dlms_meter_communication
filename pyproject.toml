@@ -22,6 +22,9 @@ dependencies = [
     "pytest-html (>=4.1.1,<5.0.0)"
 ]
 
+[project.scripts]
+dlms = "dlms_meter_communication.cli:main"
+
 [tool.poetry]
 packages = [{include = "dlms_meter_communication", from = "src"}]
 

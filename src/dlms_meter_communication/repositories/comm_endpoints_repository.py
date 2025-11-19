@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
 from ..models.enums import Medium
 from ..models.communication_endpoint import CommunicationEndpoint
 from ..schemas.communication_endpoints import (
@@ -65,7 +66,9 @@ class CommunicationEndpointRepository:
             Exception: If database query fails.
         """
         try:
-            stmt = select(CommunicationEndpoint)
+            stmt = select(CommunicationEndpoint).options(
+                selectinload(CommunicationEndpoint.device)
+            )
             stmt = stmt.order_by(
                 CommunicationEndpoint.created_at.desc()
                 if order_desc
@@ -95,8 +98,10 @@ class CommunicationEndpointRepository:
             Exception: If database query fails.
         """
         try:
-            stmt = select(CommunicationEndpoint).where(
-                CommunicationEndpoint.device_id == device_id
+            stmt = (
+                select(CommunicationEndpoint)
+                .where(CommunicationEndpoint.device_id == device_id)
+                .options(selectinload(CommunicationEndpoint.device))
             )
             communication_endpoints = self._session.exec(stmt).all()
 

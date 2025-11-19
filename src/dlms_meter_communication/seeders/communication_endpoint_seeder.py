@@ -3,8 +3,8 @@ Communication endpoint seeder for creating device connection configurations.
 """
 
 from sqlmodel import Session
-from ..models import CommunicationEndpoint, Device
-from ..models.enums import Medium, Profile
+from dlms_meter_communication.models import CommunicationEndpoint, Device
+from dlms_meter_communication.models.enums import Medium, Profile
 
 
 class CommunicationEndpointSeeder:
@@ -37,7 +37,7 @@ class CommunicationEndpointSeeder:
                 medium=Medium.TCP,
                 profile=Profile.WRAPPER,
                 ip="127.0.0.1",
-                port=4059,
+                port=4061,
                 is_primary=True,
             ),
             CommunicationEndpoint(
@@ -54,7 +54,7 @@ class CommunicationEndpointSeeder:
         for endpoint in endpoints:
             session.add(endpoint)
 
-        session.commit()
+        session.flush()
 
         # Refresh to get generated IDs
         for endpoint in endpoints:

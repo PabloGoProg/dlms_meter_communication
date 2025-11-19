@@ -62,7 +62,8 @@ async def get_communication_endpoints(
         content=CommunicationEndpointList(
             communication_endpoints=[
                 CommunicationEndpoint.model_validate(
-                    communication_endpoint, from_attributes=True
+                    communication_endpoint,
+                    from_attributes=True,
                 )
                 for communication_endpoint in communication_endpoints
             ]
@@ -127,11 +128,15 @@ async def index(session: Session = get_session_dependency()) -> JSONResponse:
     """
     device_repository = DeviceRepository(session)
     devices = device_repository.index()
+    print("devices", [d.communication_endpoints for d in devices])
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=DeviceList(
-            devices=[Device.model_validate(device) for device in devices]
-        ).model_dump(),
+            devices=[
+                Device.model_validate(device, from_attributes=True)
+                for device in devices
+            ]
+        ).model_dump(mode="json"),
     )
 
 

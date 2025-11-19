@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
 
 from ..models.device import Device
 from ..schemas.device import DeviceCreate, DeviceUpdate
@@ -59,7 +60,7 @@ class DeviceRepository:
             Exception: If database query fails.
         """
         try:
-            stmt = select(Device)
+            stmt = select(Device).options(selectinload(Device.communication_endpoints))
             stmt = stmt.order_by(
                 Device.created_at.desc() if order_desc else Device.created_at.asc(),
             )
@@ -83,7 +84,9 @@ class DeviceRepository:
         Returns:
             Optional[Device]: Device entity if found, None otherwise.
         """
-        entity = self._session.get(Device, device_id)
+        entity = self._session.get(Device, device_id).options(
+            selectinload(Device.communication_endpoints)
+        )
         return entity if entity else None
 
     def store(self, data: DeviceCreate) -> Device:

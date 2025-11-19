@@ -75,10 +75,12 @@ CREATE TABLE comm_endpoints (
 );
 
 CREATE TABLE device_addressing (
-  endpoint_id uuid PRIMARY KEY REFERENCES comm_endpoints(id) ON DELETE CASCADE,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  device_id uuid NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
   client_address integer NOT NULL,
   server_address integer NOT NULL,
-  use_logical_name boolean NOT NULL DEFAULT true
+  use_logical_name boolean NOT NULL DEFAULT true,
+  created_at timestamp NOT NULL DEFAULT now(),
 );
 
 CREATE TABLE negotiated_params (

@@ -3,7 +3,7 @@ Device seeder for populating test/demo devices in the database.
 """
 
 from sqlmodel import Session
-from ..models import Device
+from dlms_meter_communication.models import Device
 
 
 class DeviceSeeder:
@@ -48,7 +48,7 @@ class DeviceSeeder:
         for device in devices:
             session.add(device)
 
-        session.commit()
+        session.flush()
 
         # Refresh to get generated IDs
         for device in devices:

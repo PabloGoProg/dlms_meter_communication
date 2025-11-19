@@ -3,18 +3,16 @@ Device addressing seeder for creating DLMS addressing configurations.
 """
 
 from sqlmodel import Session
-from ..models import DeviceAddressing, CommunicationEndpoint
+from dlms_meter_communication.models import DeviceAddressing, Device
 
 
 class DeviceAddressingSeeder:
     """Seeds device addressing records with DLMS client/server address pairs."""
 
     @staticmethod
-    def seed(
-        session: Session, endpoints: list[CommunicationEndpoint]
-    ) -> list[DeviceAddressing]:
+    def seed(session: Session, devices: list[Device]) -> list[DeviceAddressing]:
         """
-        Creates sample device addressing records for endpoints.
+        Creates sample device addressing records for devices.
 
         Args:
             session: SQLModel session for database operations.
@@ -23,35 +21,31 @@ class DeviceAddressingSeeder:
         Returns:
             list[DeviceAddressing]: List of created addressing instances.
         """
-        addressing_records = []
+        addressing_records = [
+            DeviceAddressing(
+                device_id=devices[0].id,
+                client_address=16,
+                server_address=1,
+                use_logical_name=True,
+            ),
+            DeviceAddressing(
+                device_id=devices[1].id,
+                client_address=1,
+                server_address=17,
+                use_logical_name=True,
+            ),
+            DeviceAddressing(
+                device_id=devices[2].id,
+                client_address=32,
+                server_address=1,
+                use_logical_name=True,
+            ),
+        ]
 
-        # Create addressing for each endpoint with typical DLMS configurations
-        for i, endpoint in enumerate(endpoints):
-            # Alternate between different client addresses for variety
-            # Client addresses: 16 (Public), 1 (Management), 32 (Data read)
-            client_addresses = [16, 1, 32, 48, 64]
-            client_address = client_addresses[i % len(client_addresses)]
-
-            # Server addresses typically use format: physical_address * 2 + logical_address
-            # Common patterns: 1, 17, 33 (physical 0, 1, 2 with logical 1)
-            server_addresses = [1, 17, 33, 49, 65]
-            server_address = server_addresses[i % len(server_addresses)]
-
-            # Most modern meters use Logical Name referencing
-            # Older meters may use Short Name (use_logical_name=False)
-            use_logical_name = i < 6  # First 6 use LN, last 2 use SN for testing
-
-            addressing = DeviceAddressing(
-                endpoint_id=endpoint.id,
-                client_address=client_address,
-                server_address=server_address,
-                use_logical_name=use_logical_name,
-            )
-
-            addressing_records.append(addressing)
+        for addressing in addressing_records:
             session.add(addressing)
 
-        session.commit()
+        session.flush()
 
         # Refresh to get generated IDs
         for addressing in addressing_records:

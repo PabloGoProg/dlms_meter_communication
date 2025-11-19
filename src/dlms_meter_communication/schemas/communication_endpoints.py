@@ -36,10 +36,10 @@ class CommunicationEndpoint(BaseModel):
     device_id: UUID
     medium: Medium
     profile: Profile
-    ip: str
-    port: int
-    serial_port: str
-    baud_rate: int
+    ip: Optional[str] = None
+    port: Optional[int] = None
+    serial_port: Optional[str] = None
+    baud_rate: Optional[int] = None
     is_primary: bool
 
 
