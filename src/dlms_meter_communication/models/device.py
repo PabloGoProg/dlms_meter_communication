@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 if TYPE_CHECKING:
     from .communication_endpoint import CommunicationEndpoint
+    from .device_addressing import DeviceAddressing
 
 
 class Device(SQLModel, table=True):
@@ -26,6 +27,9 @@ class Device(SQLModel, table=True):
 
     communication_endpoints: List["CommunicationEndpoint"] = Relationship(
         back_populates="device"
+    )
+    device_addressings: List["DeviceAddressing"] = Relationship(
+        back_populates="device",
     )
 
     created_at: datetime = Field(

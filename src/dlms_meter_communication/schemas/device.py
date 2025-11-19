@@ -10,6 +10,7 @@ from typing import Optional, List
 from uuid import UUID
 
 from .communication_endpoints import CommunicationEndpoint
+from .device_addressing import DeviceAddressing
 
 
 class Device(BaseModel):
@@ -36,6 +37,7 @@ class Device(BaseModel):
     brand: str = None
     model: str = None
     communication_endpoints: List[CommunicationEndpoint] = Field(default_factory=list)
+    device_addressings: List[DeviceAddressing] = Field(default_factory=list)
 
 
 class DeviceList(BaseModel):

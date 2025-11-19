@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from uuid import UUID
-from typing import Optional
-from sqlmodel import Field, SQLModel
+from typing import Optional, TYPE_CHECKING
+from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, Integer, Boolean, ForeignKey, text, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from .device import Device
 
 
 class DeviceAddressing(SQLModel, table=True):
@@ -27,6 +30,8 @@ class DeviceAddressing(SQLModel, table=True):
 
     client_address: int = Field(sa_column=Column(Integer, nullable=False))
     server_address: int = Field(sa_column=Column(Integer, nullable=False))
+
+    device: Device = Relationship(back_populates="device_addressings")
 
     use_logical_name: bool = Field(
         default=True,

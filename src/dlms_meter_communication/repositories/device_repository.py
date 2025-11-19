@@ -60,14 +60,16 @@ class DeviceRepository:
             Exception: If database query fails.
         """
         try:
-            stmt = select(Device).options(selectinload(Device.communication_endpoints))
+            stmt = select(Device).options(
+                selectinload(Device.communication_endpoints),
+                selectinload(Device.device_addressings),
+            )
             stmt = stmt.order_by(
                 Device.created_at.desc() if order_desc else Device.created_at.asc(),
             )
             stmt = stmt.offset(offset).limit(limit)
             devices = self._session.exec(stmt).all()
 
-            print("devices", [d.id for d in devices])
             return devices
         except Exception as e:
             raise e
@@ -85,7 +87,8 @@ class DeviceRepository:
             Optional[Device]: Device entity if found, None otherwise.
         """
         entity = self._session.get(Device, device_id).options(
-            selectinload(Device.communication_endpoints)
+            selectinload(Device.communication_endpoints),
+            selectinload(Device.device_addressings),
         )
         return entity if entity else None
 
