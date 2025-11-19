@@ -86,9 +86,13 @@ class DeviceRepository:
         Returns:
             Optional[Device]: Device entity if found, None otherwise.
         """
-        entity = self._session.get(Device, device_id).options(
-            selectinload(Device.communication_endpoints),
-            selectinload(Device.device_addressings),
+        entity = self._session.get(
+            Device,
+            device_id,
+            options=[
+                selectinload(Device.communication_endpoints),
+                selectinload(Device.device_addressings),
+            ],
         )
         return entity if entity else None
 

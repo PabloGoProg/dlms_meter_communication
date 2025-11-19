@@ -25,7 +25,7 @@ class _EchoHandler(socketserver.BaseRequestHandler):
 class _NoSendHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
         # Keep the connection open without sending data
-        time.sleep(5)
+        time.sleep(0.5)
 
 
 def _run_server_in_thread(server: socketserver.TCPServer) -> threading.Thread:
