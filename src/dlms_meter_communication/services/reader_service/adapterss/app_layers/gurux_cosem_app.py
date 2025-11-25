@@ -74,19 +74,265 @@ class GuruxCOSEMApp(IAppLayer):
             print(f"ServerAddress: {hex(self.client.serverAddress)}")
 
     def associate(self, device: Device, nps: NegotiatedParams) -> None:
+        """
+        Establish application association with the meter device.
+
+        This method initializes the complete DLMS connection, including HDLC
+        and COSEM association layers.
+
+        Args:
+            device: Device configuration
+            nps: Negotiated parameters from link layer
+        """
         self._initialize_connection()
 
-    def get(self, obis_code: str) -> any:
-        pass
+    def get(self, obis_code: str, attribute_index: int = 2) -> any:
+        """
+        Execute an xDLMS GET service to read an attribute value.
 
-    def set(self, obis_code: str, value: any) -> None:
-        pass
+        This method reads a specific attribute from a DLMS object identified by
+        its OBIS code. It automatically handles the object creation, request
+        generation, response parsing, and multi-frame transfers if needed.
 
-    def action(self, obis_code: str, action: str) -> None:
-        pass
+        Args:
+            obis_code: OBIS code of the object to read (e.g., "0.0.1.0.0.255")
+            attribute_index: Attribute index to read. Default is 2 (value attribute).
+                            Common indices:
+                            - 1: logical_name
+                            - 2: value (for Data, Register objects)
+                            - 3: scaler_unit (for Register objects)
+
+        Returns:
+            The value read from the meter. Type depends on the object type:
+            - Scalar values for Data/Register objects
+            - Lists for Profile Generic buffer
+            - Complex types for structured attributes
+
+        Raises:
+            ValueError: If OBIS code format is invalid
+            GXDLMSException: If the meter returns an error (access denied, object not found, etc.)
+            TimeoutException: If the meter doesn't respond in time
+
+        Example:
+            >>> app.get("0.0.1.0.0.255")  # Read clock
+            datetime(2024, 1, 15, 10, 30, 0)
+            >>> app.get("1.0.1.8.0.255")  # Read active energy import
+            12345.67
+        """
+        if not obis_code:
+            raise ValueError("OBIS code cannot be empty")
+
+        # Validate OBIS code format (should be X.X.X.X.X.X)
+        parts = obis_code.split(".")
+        if len(parts) != 6:
+            raise ValueError(
+                f"Invalid OBIS code format: {obis_code}. Expected format: A.B.C.D.E.F"
+            )
+
+        try:
+            # Try to find the object in the client's object list (if association view was read)
+            obj = self.client.objects.findByLN(ObjectType.NONE, obis_code)
+
+            # If object not found in list, create a generic Data object
+            # This allows reading without prior association view discovery
+            if not obj:
+                obj = GXDLMSData(obis_code)
+
+            # Read the specified attribute
+            value = self._read(obj, attribute_index)
+
+            return value
+
+        except GXDLMSException as e:
+            # Re-raise DLMS exceptions with additional context
+            raise GXDLMSException(
+                f"Failed to read {obis_code} attribute {attribute_index}: {str(e)}"
+            )
+        except Exception as e:
+            # Wrap other exceptions with context
+            raise RuntimeError(
+                f"Error reading {obis_code} attribute {attribute_index}: {str(e)}"
+            )
+
+    def set(self, obis_code: str, value: any, attribute_index: int = 2) -> None:
+        """
+        Execute an xDLMS SET service to write an attribute value.
+
+        This method writes a value to a specific attribute of a DLMS object
+        identified by its OBIS code. It handles object creation, value assignment,
+        and request generation automatically.
+
+        Args:
+            obis_code: OBIS code of the object to write (e.g., "0.0.1.0.0.255")
+            value: Value to write. Must be compatible with the attribute's data type:
+                   - datetime for clock objects
+                   - int/float for register values
+                   - str for string attributes
+                   - bytes/bytearray for octet-string attributes
+            attribute_index: Attribute index to write. Default is 2 (value attribute).
+
+        Raises:
+            ValueError: If OBIS code is invalid or value type is incompatible
+            PermissionError: If write access is denied (insufficient authentication)
+            GXDLMSException: If the meter returns an error
+            TimeoutException: If the meter doesn't respond in time
+
+        Example:
+            >>> from datetime import datetime
+            >>> app.set("0.0.1.0.0.255", datetime.now())  # Set clock
+            >>> app.set("1.0.0.2.0.255", 100)  # Set demand period
+        """
+        if not obis_code:
+            raise ValueError("OBIS code cannot be empty")
+
+        # Validate OBIS code format
+        parts = obis_code.split(".")
+        if len(parts) != 6:
+            raise ValueError(
+                f"Invalid OBIS code format: {obis_code}. Expected format: A.B.C.D.E.F"
+            )
+
+        if value is None:
+            raise ValueError("Value to write cannot be None")
+
+        try:
+            # Try to find the object in the client's object list
+            obj = self.client.objects.findByLN(ObjectType.NONE, obis_code)
+
+            # If object not found, create a generic Data object
+            if not obj:
+                obj = GXDLMSData(obis_code)
+
+            # Set the value in the object
+            # For attribute 2 (value), we set it directly
+            if attribute_index == 2:
+                obj.value = value
+            else:
+                # For other attributes, use setDataType and setValue
+                obj.setValue(self.client.settings, attribute_index, value)
+
+            # Write the value to the meter
+            self._write(obj, attribute_index)
+
+        except GXDLMSException as e:
+            # Check if it's an access denied error
+            if "access" in str(e).lower() or "denied" in str(e).lower():
+                raise PermissionError(f"Access denied writing to {obis_code}: {str(e)}")
+            raise GXDLMSException(
+                f"Failed to write {obis_code} attribute {attribute_index}: {str(e)}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Error writing {obis_code} attribute {attribute_index}: {str(e)}"
+            )
+
+    def action(self, obis_code: str, method_index: int, parameters: any = None) -> any:
+        """
+        Execute an xDLMS ACTION service (method invocation).
+
+        This method invokes a specific method on a DLMS object identified by its
+        OBIS code. Methods perform operations like resetting counters, executing
+        firmware updates, or triggering meter functions.
+
+        Args:
+            obis_code: OBIS code of the object (e.g., "0.0.1.0.0.255")
+            method_index: Method index to invoke. Each object type has specific methods:
+                         - Clock (0.0.1.0.0.255): Method 1 = adjust_to_quarter,
+                                                  Method 2 = adjust_to_measuring_period,
+                                                  Method 3 = adjust_to_minute,
+                                                  Method 4 = adjust_to_preset_time,
+                                                  Method 5 = preset_adjusting_time,
+                                                  Method 6 = shift_time
+                         - Activity Calendar: Method 1 = activate_passive_calendar
+                         - Disconnect Control: Method 1 = remote_disconnect,
+                                               Method 2 = remote_reconnect
+            parameters: Optional parameters for the method, encoded according to
+                       the method's parameter specification. Can be:
+                       - None for methods without parameters
+                       - Single value for methods with one parameter
+                       - List/tuple for methods with multiple parameters
+
+        Returns:
+            The method's return value if any. Many methods return None (confirmation only).
+
+        Raises:
+            ValueError: If OBIS code or method_index is invalid
+            PermissionError: If action execution requires higher authentication
+            GXDLMSException: If the meter returns an error
+            TimeoutException: If the meter doesn't respond in time
+
+        Example:
+            >>> # Adjust clock to quarter hour
+            >>> app.action("0.0.1.0.0.255", 1)
+            >>>
+            >>> # Remote disconnect
+            >>> app.action("0.0.96.3.10.255", 1)
+            >>>
+            >>> # Activate passive calendar
+            >>> app.action("0.0.13.0.0.255", 1)
+        """
+        if not obis_code:
+            raise ValueError("OBIS code cannot be empty")
+
+        # Validate OBIS code format
+        parts = obis_code.split(".")
+        if len(parts) != 6:
+            raise ValueError(
+                f"Invalid OBIS code format: {obis_code}. Expected format: A.B.C.D.E.F"
+            )
+
+        if method_index < 1:
+            raise ValueError(f"Method index must be >= 1, got {method_index}")
+
+        try:
+            # Try to find the object in the client's object list
+            obj = self.client.objects.findByLN(ObjectType.NONE, obis_code)
+
+            # If object not found, create a generic object
+            if not obj:
+                obj = GXDLMSObject(ObjectType.NONE, obis_code, 0)
+
+            # Prepare method invocation parameters
+            # The Gurux library expects parameters as a specific format
+            data = self.client.method(obj, method_index, parameters, DataType.NONE)
+            reply = GXReplyData()
+
+            # Send action request and receive response
+            self._read_data_block(data, reply)
+
+            # Parse and return the response value if any
+            if reply.value:
+                return reply.value
+
+            return None
+
+        except GXDLMSException as e:
+            # Check if it's an access/permission error
+            if "access" in str(e).lower() or "denied" in str(e).lower():
+                raise PermissionError(
+                    f"Access denied executing action on {obis_code}: {str(e)}"
+                )
+            raise GXDLMSException(
+                f"Failed to execute method {method_index} on {obis_code}: {str(e)}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Error executing method {method_index} on {obis_code}: {str(e)}"
+            )
 
     def disconnect(self) -> None:
-        if self.nedia and self.media.isOpen():
+        """
+        Close the DLMS association and disconnect from the meter.
+
+        This method performs a graceful disconnection sequence:
+        1. Send Release Request (RLRQ) if using Wrapper or encryption
+        2. Send Disconnect Request (DISC) to close HDLC connection
+        3. Close the physical media connection
+
+        Errors during disconnection are silently ignored to ensure cleanup
+        completes even if the meter is unresponsive.
+        """
+        if self.media and self.media.isOpen():
             reply = GXReplyData()
 
             try:
@@ -101,6 +347,95 @@ class GuruxCOSEMApp(IAppLayer):
             reply.clear()
             self._read_dlms_packet(self.client.disconnectRequest(), reply)
             self.media.close()
+
+    def get_clock(self) -> datetime:
+        """
+        Read the current time from the meter's clock object.
+
+        This is a convenience method that reads the standard clock object
+        (OBIS 0.0.1.0.0.255) and returns the meter's current time.
+
+        Returns:
+            datetime: The meter's current date and time
+
+        Raises:
+            GXDLMSException: If reading the clock fails
+
+        Example:
+            >>> meter_time = app.get_clock()
+            >>> print(f"Meter time: {meter_time}")
+        """
+        return self.get("0.0.1.0.0.255", 2)
+
+    def set_clock(self, new_time: datetime) -> None:
+        """
+        Set the meter's clock to a specific date and time.
+
+        This method writes to the standard clock object (OBIS 0.0.1.0.0.255).
+        Requires appropriate authentication level (typically HIGH or above).
+
+        Args:
+            new_time: The datetime to set in the meter
+
+        Raises:
+            PermissionError: If authentication level is insufficient
+            GXDLMSException: If setting the clock fails
+
+        Example:
+            >>> from datetime import datetime
+            >>> app.set_clock(datetime.now())
+        """
+        self.set("0.0.1.0.0.255", new_time, 2)
+
+    def get_serial_number(self) -> str:
+        """
+        Read the meter's serial number.
+
+        Reads from the standard serial number object (OBIS 0.0.96.1.0.255).
+
+        Returns:
+            str: The meter's serial number
+
+        Example:
+            >>> serial = app.get_serial_number()
+            >>> print(f"Serial: {serial}")
+        """
+        return self.get("0.0.96.1.0.255", 2)
+
+    def get_active_energy_import(self) -> float:
+        """
+        Read the total active energy import register.
+
+        Reads from the standard active energy import total register
+        (OBIS 1.0.1.8.0.255).
+
+        Returns:
+            float: The total active energy imported in kWh (scaled)
+
+        Example:
+            >>> energy = app.get_active_energy_import()
+            >>> print(f"Energy consumed: {energy} kWh")
+        """
+        return self.get("1.0.1.8.0.255", 2)
+
+    def synchronize_clock(self) -> None:
+        """
+        Synchronize the meter's clock with the client system time.
+
+        This method adjusts the meter's clock to match the current system time.
+        It's equivalent to calling set_clock(datetime.now()).
+
+        Raises:
+            PermissionError: If authentication level is insufficient
+            GXDLMSException: If synchronization fails
+
+        Example:
+            >>> app.synchronize_clock()
+            >>> print("Meter clock synchronized")
+        """
+        from datetime import datetime
+
+        self.set_clock(datetime.now())
 
     def _read_dlms_packet(self, data: Any, reply: GXReplyData = None) -> None:
         """
