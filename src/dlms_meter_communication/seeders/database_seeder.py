@@ -78,7 +78,6 @@ class DatabaseSeeder:
         This method will delete all data from the database, including all tables.
         """
         print("Starting database cleaning...")
-        print("--------------------------------------------------------------")
         with get_context_session() as session:
             try:
                 session.exec(text("DELETE FROM devices CASCADE"))

@@ -1,5 +1,5 @@
 from .connection_factory import ConnectionFactory
-from .tcp_conn_factory import TCPConnectionFactory
 from .serial_conn_factory import SerialConnectionFactory
+from .tcp_conn_factory import TCPConnectionFactory
 
-__all__ = ["ConnectionFactory", "TCPConnectionFactory", "SerialConnectionFactory"]
+__all__ = ["ConnectionFactory", "SerialConnectionFactory", "TCPConnectionFactory"]

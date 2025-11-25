@@ -121,9 +121,9 @@ def sample_device_addressing() -> Callable[[UUID], DeviceAddressingCreate]:
         Callable that generates DeviceAddressingCreate instances
     """
 
-    def factory(endpoint_id: UUID) -> DeviceAddressingCreate:
+    def factory(device_id: UUID) -> DeviceAddressingCreate:
         return DeviceAddressingCreate(
-            endpoint_id=endpoint_id,
+            device_id=device_id,
             client_address=random.randint(1, 255),
             server_address=random.randint(1, 255),
             use_logical_name=random.choice([True, False]),

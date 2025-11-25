@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
-from ..repositories.comm_endpoints_repository import CommunicationEndpointRepository
+from ..repositories import DeviceRepository
 from ..models import DeviceAddressing
 from ..schemas import (
     DeviceAddressingCreate,
@@ -70,7 +70,7 @@ class DeviceAddressingRepository:
         except Exception as e:
             raise e
 
-    def index_by_endpoint_id(self, endpoint_id: UUID) -> list[DeviceAddressing]:
+    def index_by_device_id(self, device_id: UUID) -> list[DeviceAddressing]:
         """
         Retrieve a list of device addressing configurations by endpoint ID.
 
@@ -81,18 +81,14 @@ class DeviceAddressingRepository:
             list[DeviceAddressing]: List of device addressing configurations.
         """
         try:
-            comm_endpoint_repository = CommunicationEndpointRepository(self._session)
-            comm_endpoint = comm_endpoint_repository.show(endpoint_id)
+            stmt = (
+                select(DeviceAddressing)
+                .where(DeviceAddressing.device_id == device_id)
+                .order_by(DeviceAddressing.created_at.desc())
+            )
+            device_addressings = self._session.exec(stmt).all()
 
-            if comm_endpoint is None:
-                raise NoResultFound(
-                    f"Communication endpoint with id {endpoint_id} not found"
-                )
-
-            return [
-                DeviceAddressing(**device_addressing.model_dump())
-                for device_addressing in comm_endpoint.device_addressings
-            ]
+            return device_addressings
         except Exception as e:
             raise e
 
@@ -124,9 +120,14 @@ class DeviceAddressingRepository:
         """
         server_address, client_address = data.server_address, data.client_address
 
+        device_repository = DeviceRepository(self._session)
+        device = device_repository.show(data.device_id)
+        if device is None:
+            raise NoResultFound(f"Device with id {data.device_id} not found")
+
         already_exists = self._session.exec(
             select(DeviceAddressing).where(
-                DeviceAddressing.endpoint_id == data.endpoint_id,
+                DeviceAddressing.device_id == data.device_id,
                 DeviceAddressing.server_address == server_address,
                 DeviceAddressing.client_address == client_address,
             )
@@ -134,22 +135,14 @@ class DeviceAddressingRepository:
 
         if already_exists:
             raise InvalidRequestError(
-                statement=f"Device addressing already exists for endpoint {data.endpoint_id} with server address {server_address} and client address {client_address}"
+                f"Device addressing already exists for device {data.device_id} with server address {server_address} and client address {client_address}"
             )
 
-        comm_endpoint_repository = CommunicationEndpointRepository(self._session)
-        comm_endpoint = comm_endpoint_repository.show(data.endpoint_id)
-
-        if comm_endpoint is None:
-            raise NoResultFound(
-                f"Communication endpoint with id {data.endpoint_id} not found"
-            )
-
-        comm_endpoint.device_addressings.append(data)
-        self._session.add(comm_endpoint)
-        self._session.commit()
-
-        return comm_endpoint.device_addressings[-1]
+        entity = DeviceAddressing(**data.model_dump())
+        self._session.add(entity)
+        self._session.flush()
+        self._session.refresh(entity)
+        return entity
 
     def update(
         self, device_addressing_id: UUID, data: DeviceAddressingUpdate
@@ -176,7 +169,7 @@ class DeviceAddressingRepository:
 
         already_exists = self._session.exec(
             select(DeviceAddressing).where(
-                DeviceAddressing.endpoint_id == data.endpoint_id,
+                DeviceAddressing.device_id == entity.device_id,
                 DeviceAddressing.server_address == server_address,
                 DeviceAddressing.client_address == client_address,
             )
@@ -184,7 +177,7 @@ class DeviceAddressingRepository:
 
         if already_exists:
             raise InvalidRequestError(
-                statement=f"Device addressing already exists for endpoint {data.endpoint_id} with server address {server_address} and client address {client_address}"
+                statement=f"Device addressing already exists for device {data.device_id} with server address {server_address} and client address {client_address}"
             )
 
         update_data = data.model_dump(exclude_unset=True)
@@ -192,6 +185,7 @@ class DeviceAddressingRepository:
         for k, v in update_data.items():
             setattr(entity, k, v)
 
+        self._session.add(entity)
         self._session.flush()
         self._session.refresh(entity)
         return entity
