@@ -23,6 +23,7 @@ from gurux_dlms.enums import InterfaceType, Authentication
 from gurux_dlms.GXDLMSClient import GXDLMSClient
 from gurux_net import GXNet
 from gurux_net.enums import NetworkType
+from gurux_common.enums import TraceLevel
 
 
 class GuruxAppFactory(AppLayerFactory):
@@ -88,7 +89,13 @@ class GuruxAppFactory(AppLayerFactory):
                 )
 
                 # Return configured Gurux COSEM application layer
-                return GuruxCOSEMApp(client=gurux_client, media=gx_media)
+                # trace_level=OFF for production, invocation_counter starts at 0
+                return GuruxCOSEMApp(
+                    client=gurux_client,
+                    media=gx_media,
+                    trace_level=TraceLevel.OFF,
+                    invocation_counter=0,
+                )
             except Exception as e:
                 raise e
             finally:

@@ -11,7 +11,12 @@ from __future__ import annotations
 from .app_layer_factory import AppLayerFactory
 from ...factories.link_layers import TCPWrapperLinkLayerFactory, HDLCLinkLayerFactory
 from ...adapterss.app_layers.cosem_app import COSEMApp
-from dlms_meter_communication.schemas import CommunicationEndpoint
+
+from dlms_meter_communication.db.database import get_context_session
+from dlms_meter_communication.repositories import (
+    CommunicationEndpointRepository,
+)
+from dlms_meter_communication.schemas import Device
 from dlms_meter_communication.models.enums import Profile
 
 
@@ -24,12 +29,12 @@ class COSEMNativeAppFactory(AppLayerFactory):
     for serial) based on the communication profile.
     """
 
-    def create_app_layer(self, endpoint: CommunicationEndpoint) -> COSEMApp:
+    def create_app_layer(self, device: Device) -> COSEMApp:
         """
         Create a native COSEM application layer instance.
 
         Args:
-            endpoint: Communication endpoint configuration containing the profile
+            device: Device configuration containing the profile
                      type (Wrapper or HDLC)
 
         Returns:
@@ -37,11 +42,24 @@ class COSEMNativeAppFactory(AppLayerFactory):
                      link layer
         """
         # Select link layer factory based on communication profile
-        link_layer_factory = (
-            TCPWrapperLinkLayerFactory()
-            if endpoint.profile == Profile.WRAPPER
-            else HDLCLinkLayerFactory()
-        )
+        with get_context_session() as session:
+            try:
+                comm_endpoint_repo = CommunicationEndpointRepository(session=session)
+                dv_primary_endpoint = comm_endpoint_repo.get_primary_by_device_id(
+                    device.id
+                )
 
-        # Create and return COSEM app with the configured link layer
-        return COSEMApp(link_layer_factory.create_link_layer(endpoint))
+                link_layer_factory = (
+                    TCPWrapperLinkLayerFactory()
+                    if dv_primary_endpoint.profile == Profile.WRAPPER
+                    else HDLCLinkLayerFactory()
+                )
+
+                # Create and return COSEM app with the configured link layer
+                return COSEMApp(
+                    link_layer_factory.create_link_layer(dv_primary_endpoint)
+                )
+            except Exception as e:
+                raise e
+            finally:
+                session.close()

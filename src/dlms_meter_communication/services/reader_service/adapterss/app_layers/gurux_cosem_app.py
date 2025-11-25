@@ -74,7 +74,7 @@ class GuruxCOSEMApp(IAppLayer):
             print(f"ServerAddress: {hex(self.client.serverAddress)}")
 
     def associate(self, device: Device, nps: NegotiatedParams) -> None:
-        pass
+        self._initialize_connection()
 
     def get(self, obis_code: str) -> any:
         pass

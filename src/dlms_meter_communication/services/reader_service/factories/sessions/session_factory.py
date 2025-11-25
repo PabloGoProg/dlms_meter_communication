@@ -11,9 +11,9 @@ from __future__ import annotations
 from ...ports import IAppLayer
 from ...utils.enums import AppLayerProviderType
 from ..app_layers import COSEMNativeAppFactory, GuruxAppFactory
-from ...core import Session
+from ...core.session import Session
 
-from dlms_meter_communication.db import get_session
+from dlms_meter_communication.db.database import get_context_session
 from dlms_meter_communication.schemas import Device
 from dlms_meter_communication.repositories import (
     CommunicationEndpointRepository,
@@ -30,7 +30,11 @@ class SessionFactory:
     3. Creating and configuring the session with the device and app layer
     """
 
-    def build_session(self, device: Device) -> Session:
+    def build_session(
+        self,
+        device: Device,
+        app_layer_provider_type: AppLayerProviderType = AppLayerProviderType.GURUX_COSEM,
+    ) -> Session:
         """
         Build a complete communication session for the given device.
 
@@ -49,23 +53,24 @@ class SessionFactory:
                        or GURUX_COSEM)
         """
         # Get database session and repository
-        session = get_session()
-        comm_endpoint_repo = CommunicationEndpointRepository(session=session)
-        dv_primary_endpoint = comm_endpoint_repo.get_primary_by_device_id(device.id)
+        with get_context_session() as session:
+            comm_endpoint_repo = CommunicationEndpointRepository(session=session)
+            dv_primary_endpoint = comm_endpoint_repo.get_primary_by_device_id(device.id)
 
-        cosem_app_layer: IAppLayer = None
+            cosem_app_layer: IAppLayer = None
 
-        # Select and create the appropriate application layer based on profile
-        if dv_primary_endpoint.profile == AppLayerProviderType.COSEM_NATIVE:
-            cosem_app_layer = COSEMNativeAppFactory().create_app_layer(
-                dv_primary_endpoint
-            )
-        elif dv_primary_endpoint.profile == AppLayerProviderType.GURUX_COSEM:
-            cosem_app_layer = GuruxAppFactory().create_app_layer(dv_primary_endpoint)
-        else:
-            raise ValueError(
-                f"Unsupported app layer provider type: {dv_primary_endpoint.profile}"
-            )
+            if app_layer_provider_type == AppLayerProviderType.COSEM_NATIVE:
+                # Select and create the appropriate application layer based on profile
+                if dv_primary_endpoint.profile == AppLayerProviderType.COSEM_NATIVE:
+                    cosem_app_layer = COSEMNativeAppFactory().create_app_layer(
+                        dv_primary_endpoint
+                    )
+            elif app_layer_provider_type == AppLayerProviderType.GURUX_COSEM:
+                cosem_app_layer = GuruxAppFactory().create_app_layer(
+                    dv_primary_endpoint
+                )
 
-        # Create and return the session with device and app layer
-        return Session(device, cosem_app_layer)
+            # Create and return the session with device and app layer
+            session = Session(device)
+            session.app_layer = cosem_app_layer
+            return session

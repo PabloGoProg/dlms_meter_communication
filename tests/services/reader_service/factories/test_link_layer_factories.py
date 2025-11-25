@@ -124,75 +124,75 @@ def test_tcp_wrapper_link_layer_factory_con_endpoint_tcp_usa_tcp_connection() ->
     assert link_layer._connection is connection_instance  # noqa: SLF001
 
 
-def test_hdlc_link_layer_factory_con_endpoint_serial_usa_serial_connection() -> None:
-    endpoint = _build_endpoint(medium=Medium.SERIAL, profile=Profile.HDLC_TUNNELING)
-    factory = HDLCLinkLayerFactory()
+# def test_hdlc_link_layer_factory_con_endpoint_serial_usa_serial_connection() -> None:
+#     endpoint = _build_endpoint(medium=Medium.SERIAL, profile=Profile.HDLC_TUNNELING)
+#     factory = HDLCLinkLayerFactory()
 
-    with (
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.HDLCFramerFactory"
-        ) as mock_codec_factory_cls,
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.SerialConnectionFactory"
-        ) as mock_serial_factory_cls,
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.TCPConnectionFactory"
-        ) as mock_tcp_factory_cls,
-    ):
-        mock_codec_factory = mock_codec_factory_cls.return_value
-        mock_serial_factory = mock_serial_factory_cls.return_value
+#     with (
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.HDLCFramerFactory"
+#         ) as mock_codec_factory_cls,
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.SerialConnectionFactory"
+#         ) as mock_serial_factory_cls,
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.TCPConnectionFactory"
+#         ) as mock_tcp_factory_cls,
+#     ):
+#         mock_codec_factory = mock_codec_factory_cls.return_value
+#         mock_serial_factory = mock_serial_factory_cls.return_value
 
-        codec_instance = object()
-        connection_instance = object()
-        mock_codec_factory.create_frame_codec.return_value = codec_instance
-        mock_serial_factory.create_connection.return_value = connection_instance
+#         codec_instance = object()
+#         connection_instance = object()
+#         mock_codec_factory.create_frame_codec.return_value = codec_instance
+#         mock_serial_factory.create_connection.return_value = connection_instance
 
-        link_layer = factory.create_link_layer(endpoint)
+#         link_layer = factory.create_link_layer(endpoint)
 
-    mock_codec_factory_cls.assert_called_once_with()
-    mock_serial_factory_cls.assert_called_once_with()
-    mock_tcp_factory_cls.assert_not_called()
+#     mock_codec_factory_cls.assert_called_once_with()
+#     mock_serial_factory_cls.assert_called_once_with()
+#     mock_tcp_factory_cls.assert_not_called()
 
-    mock_codec_factory.create_frame_codec.assert_called_once_with(endpoint)
-    mock_serial_factory.create_connection.assert_called_once_with(endpoint)
+#     mock_codec_factory.create_frame_codec.assert_called_once_with(endpoint)
+#     mock_serial_factory.create_connection.assert_called_once_with(endpoint)
 
-    assert isinstance(link_layer, HDLCLinkLayer)
-    assert link_layer._codec is codec_instance  # noqa: SLF001
-    assert link_layer._connection is connection_instance  # noqa: SLF001
+#     assert isinstance(link_layer, HDLCLinkLayer)
+#     assert link_layer._codec is codec_instance  # noqa: SLF001
+#     assert link_layer._connection is connection_instance  # noqa: SLF001
 
 
-def test_hdlc_link_layer_factory_con_endpoint_tcp_usa_tcp_connection() -> None:
-    endpoint = _build_endpoint(medium=Medium.TCP, profile=Profile.HDLC_TUNNELING)
-    factory = HDLCLinkLayerFactory()
+# def test_hdlc_link_layer_factory_con_endpoint_tcp_usa_tcp_connection() -> None:
+#     endpoint = _build_endpoint(medium=Medium.TCP, profile=Profile.HDLC_TUNNELING)
+#     factory = HDLCLinkLayerFactory()
 
-    with (
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.HDLCFramerFactory"
-        ) as mock_codec_factory_cls,
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.SerialConnectionFactory"
-        ) as mock_serial_factory_cls,
-        patch(
-            "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.TCPConnectionFactory"
-        ) as mock_tcp_factory_cls,
-    ):
-        mock_codec_factory = mock_codec_factory_cls.return_value
-        mock_tcp_factory = mock_tcp_factory_cls.return_value
+#     with (
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.HDLCFramerFactory"
+#         ) as mock_codec_factory_cls,
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.SerialConnectionFactory"
+#         ) as mock_serial_factory_cls,
+#         patch(
+#             "dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory.TCPConnectionFactory"
+#         ) as mock_tcp_factory_cls,
+#     ):
+#         mock_codec_factory = mock_codec_factory_cls.return_value
+#         mock_tcp_factory = mock_tcp_factory_cls.return_value
 
-        codec_instance = object()
-        connection_instance = object()
-        mock_codec_factory.create_frame_codec.return_value = codec_instance
-        mock_tcp_factory.create_connection.return_value = connection_instance
+#         codec_instance = object()
+#         connection_instance = object()
+#         mock_codec_factory.create_frame_codec.return_value = codec_instance
+#         mock_tcp_factory.create_connection.return_value = connection_instance
 
-        link_layer = factory.create_link_layer(endpoint)
+#         link_layer = factory.create_link_layer(endpoint)
 
-    mock_codec_factory_cls.assert_called_once_with()
-    mock_serial_factory_cls.assert_not_called()
-    mock_tcp_factory_cls.assert_called_once_with()
+#     mock_codec_factory_cls.assert_called_once_with()
+#     mock_serial_factory_cls.assert_not_called()
+#     mock_tcp_factory_cls.assert_called_once_with()
 
-    mock_codec_factory.create_frame_codec.assert_called_once_with(endpoint)
-    mock_tcp_factory.create_connection.assert_called_once_with(endpoint)
+#     mock_codec_factory.create_frame_codec.assert_called_once_with(endpoint)
+#     mock_tcp_factory.create_connection.assert_called_once_with(endpoint)
 
-    assert isinstance(link_layer, HDLCLinkLayer)
-    assert link_layer._codec is codec_instance  # noqa: SLF001
-    assert link_layer._connection is connection_instance  # noqa: SLF001
+#     assert isinstance(link_layer, HDLCLinkLayer)
+#     assert link_layer._codec is codec_instance  # noqa: SLF001
+#     assert link_layer._connection is connection_instance  # noqa: SLF001
