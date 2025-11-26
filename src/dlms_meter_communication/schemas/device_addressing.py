@@ -26,6 +26,7 @@ class DeviceAddressing(BaseModel):
         client_address: Client address for DLMS/COSEM communication.
         server_address: Server address for DLMS/COSEM communication.
         use_logical_name: Whether to use logical name addressing mode.
+        password: Password for DLMS/COSEM communication.
     """
 
     id: UUID
@@ -33,6 +34,7 @@ class DeviceAddressing(BaseModel):
     client_address: int
     server_address: int
     use_logical_name: bool
+    password: Optional[str] = None
 
 
 class DeviceAddressingList(BaseModel):
@@ -61,12 +63,14 @@ class DeviceAddressingCreate(BaseModel):
         client_address: Client address for DLMS/COSEM communication.
         server_address: Server address for DLMS/COSEM communication.
         use_logical_name: Whether to use logical name addressing mode.
+        password: Password for DLMS/COSEM communication.
     """
 
     device_id: UUID
     client_address: int
     server_address: int
     use_logical_name: bool
+    password: Optional[str] = None
 
 
 class DeviceAddressingUpdate(BaseModel):
@@ -81,8 +85,10 @@ class DeviceAddressingUpdate(BaseModel):
         client_address: Optional new client address for DLMS/COSEM communication.
         server_address: Optional new server address for DLMS/COSEM communication.
         use_logical_name: Optional new logical name addressing mode setting.
+        password: Optional new password for DLMS/COSEM communication.
     """
 
     client_address: Optional[int] = None
     server_address: Optional[int] = None
     use_logical_name: Optional[bool] = None
+    password: Optional[str] = None

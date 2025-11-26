@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 from typing import Optional, TYPE_CHECKING
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, Integer, Boolean, ForeignKey, text, DateTime
+from sqlalchemy import Column, Integer, Boolean, ForeignKey, text, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from datetime import datetime
 
@@ -37,6 +37,8 @@ class DeviceAddressing(SQLModel, table=True):
         default=True,
         sa_column=Column(Boolean, nullable=False, default=True),
     )
+
+    password: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(
         sa_column=Column(

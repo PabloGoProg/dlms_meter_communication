@@ -6,10 +6,11 @@ from typing import Any
 import time
 import os
 
+from dlms_meter_communication.schemas import Device
+
 from gurux_dlms import (
     GXByteBuffer,
     GXDLMSAccessItem,
-    GXDLMSClient,
     GXReplyData,
     GXDLMSTranslator,
     GXDLMSException,
@@ -35,6 +36,8 @@ from gurux_dlms.enums import (
     ObjectType,
     AccessServiceCommandType,
 )
+from gurux_dlms.secure.GXDLMSSecureClient import GXDLMSSecureClient
+from gurux_dlms.GXDLMSConverter import GXDLMSConverter
 from gurux_net import GXNet
 from gurux_common import GXCommon, ReceiveParameters, TimeoutException
 from gurux_common.io import Parity, StopBits
@@ -50,13 +53,11 @@ from gurux_dlms.asn.GXCertificateRequest import GXCertificateRequest
 from gurux_dlms.objects.enums.CertificateEntity import CertificateEntity
 from gurux_dlms.GXDLMSConverter import GXDLMSConverter
 
-from dlms_meter_communication.schemas import Device, NegotiatedParams
-
 
 class GuruxCOSEMApp(IAppLayer):
     def __init__(
         self,
-        client: GXDLMSClient,
+        client: GXDLMSSecureClient,
         media: GXNet,
         trace_level: TraceLevel,
         invocation_counter: int,
@@ -73,7 +74,7 @@ class GuruxCOSEMApp(IAppLayer):
             print(f"ClientAddress: {hex(self.client.clientAddress)}")
             print(f"ServerAddress: {hex(self.client.serverAddress)}")
 
-    def associate(self, device: Device, nps: NegotiatedParams) -> None:
+    def associate(self, device: Device) -> None:
         """
         Establish application association with the meter device.
 
@@ -85,6 +86,34 @@ class GuruxCOSEMApp(IAppLayer):
             nps: Negotiated parameters from link layer
         """
         self._initialize_connection()
+
+    def get_association_view(self) -> list[dict]:
+        """
+        Get the association view (object list) from the peer.
+
+        This retrieves the complete object list from the association object,
+        which contains all COSEM objects available in the meter with their
+        class IDs, logical names, versions, and access rights.
+
+        Returns:
+            list[dict]: Collection of all DLMS objects with their metadata
+        """
+        self._get_association_view()
+
+        result = []
+        for obj in self.client.objects:
+            obj_dict = {
+                "class_id": int(obj.objectType),
+                "object_type": GXDLMSConverter.objectTypeToString(obj.objectType),
+                "logical_name": obj.logicalName,
+                "version": obj.version,
+                "short_name": obj.shortName if obj.shortName != 0 else None,
+                "description": obj.description or "",
+            }
+
+            result.append(obj_dict)
+
+        return result
 
     def get(self, obis_code: str, attribute_index: int = 2) -> any:
         """
@@ -131,7 +160,8 @@ class GuruxCOSEMApp(IAppLayer):
 
         try:
             # Try to find the object in the client's object list (if association view was read)
-            obj = self.client.objects.findByLN(ObjectType.NONE, obis_code)
+            obj = self.client.objects.findByLN(ObjectType.DATA, obis_code)
+            print(obj)
 
             # If object not found in list, create a generic Data object
             # This allows reading without prior association view discovery
@@ -140,6 +170,7 @@ class GuruxCOSEMApp(IAppLayer):
 
             # Read the specified attribute
             value = self._read(obj, attribute_index)
+            print(value)
 
             return value
 
@@ -556,7 +587,7 @@ class GuruxCOSEMApp(IAppLayer):
         params = ReceiveParameters()
         params.eop = eop
         params.allData = True
-        params.waitTime = self.waitTime
+        params.waitTime = self.wait_time
 
         # For network connections (eop=None), we need 8 bytes to read the frame length
         # header. For HDLC (with EOP marker), 5 bytes are sufficient for the initial
@@ -621,13 +652,15 @@ class GuruxCOSEMApp(IAppLayer):
                     rd.set(params.reply)
                     params.reply = None
             except Exception as e:
-                self.writeTrace("RX: " + self.now() + "\t" + str(rd), TraceLevel.ERROR)
+                # self.writeTrace("RX: " + self.now() + "\t" + str(rd), TraceLevel.ERROR)
+                print("Error: " + str(rd))
                 raise e
 
-            self.writeTrace("RX: " + self.now() + "\t" + str(rd), TraceLevel.VERBOSE)
+            # self.writeTrace("RX: " + self.now() + "\t" + str(rd), TraceLevel.VERBOSE)
             # Even if communication succeeded, DLMS protocol may indicate application-level
             # errors (e.g., object not found, access denied). Check and raise if present.
             if reply.error != 0:
+                print("Error: " + str(reply.error))
                 raise GXDLMSException(reply.error)
 
     def _read_data_block(self, data, reply):
@@ -706,7 +739,7 @@ class GuruxCOSEMApp(IAppLayer):
             Exception: If the meter does not respond, returns invalid identification,
                 or specifies an unsupported baud rate.
         """
-        if self.client.InterfaceType == InterfaceType.HDLC_WITH_MODE_E:
+        if self.client.interfaceType == InterfaceType.HDLC_WITH_MODE_E:
             params = ReceiveParameters()
 
             params.allData = True
@@ -932,6 +965,7 @@ class GuruxCOSEMApp(IAppLayer):
         # SNRM (Set Normal Response Mode) establishes the HDLC connection and negotiates
         # parameters like maximum frame size, window size, etc.
         snrm = self.client.snrmRequest()
+        print(snrm)
 
         if snrm:
             self._read_dlms_packet(snrm, reply)
@@ -946,7 +980,7 @@ class GuruxCOSEMApp(IAppLayer):
         # Phase 4: COSEM Application Layer Association
         # AARQ (Association Request) initiates the application-level association.
         # This is where authentication type and conformance blocks are negotiated.
-        self.readDataBlock(self.client.aarqRequest(), reply)
+        self._read_data_block(self.client.aarqRequest(), reply)
         # AARE (Association Response) contains the meter's response, including
         # accepted conformance, authentication result, and any error diagnostics.
         self.client.parseAareResponse(reply.data)

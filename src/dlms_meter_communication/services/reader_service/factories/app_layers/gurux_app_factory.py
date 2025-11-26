@@ -20,7 +20,7 @@ from dlms_meter_communication.repositories import (
 )
 
 from gurux_dlms.enums import InterfaceType, Authentication
-from gurux_dlms.GXDLMSClient import GXDLMSClient
+from gurux_dlms.secure.GXDLMSSecureClient import GXDLMSSecureClient
 from gurux_net import GXNet
 from gurux_net.enums import NetworkType
 from gurux_common.enums import TraceLevel
@@ -67,17 +67,22 @@ class GuruxAppFactory(AppLayerFactory):
                 primary_comm_endpoint = comm_endpoint_repo.get_primary_by_device_id(
                     device.id
                 )
-                addressing = device_addressing_repo.index_by_device_id(device.id)[0]
+                addressings = device_addressing_repo.index_by_device_id(device.id)
+
+                if len(addressings) == 0:
+                    raise ValueError(f"No addressing found for device {device.id}")
+
+                addressing = addressings[0]
 
                 # Configure Gurux DLMS client with device settings
-                gurux_client = GXDLMSClient(
-                    interfaceType=InterfaceType.WRAPPER
+                gurux_client = GXDLMSSecureClient(
+                    interfaceType=InterfaceType.HDLC
                     if primary_comm_endpoint.profile == Profile.WRAPPER
                     else InterfaceType.HDLC,
-                    clientAddress=addressing.client_address,
-                    serverAddress=addressing.server_address,
+                    clientAddress=16,
+                    serverAddress=1,
                     forAuthentication=Authentication.LOW,
-                    password=None,
+                    password="11111111",
                     useLogicalNameReferencing=addressing.use_logical_name,
                 )
 
@@ -85,15 +90,17 @@ class GuruxAppFactory(AppLayerFactory):
                 gx_media = GXNet(
                     networkType=NetworkType.TCP,
                     name=primary_comm_endpoint.ip,
-                    port=primary_comm_endpoint.port,
+                    portNo=primary_comm_endpoint.port,
                 )
+
+                gx_media.open()
 
                 # Return configured Gurux COSEM application layer
                 # trace_level=OFF for production, invocation_counter starts at 0
                 return GuruxCOSEMApp(
                     client=gurux_client,
                     media=gx_media,
-                    trace_level=TraceLevel.OFF,
+                    trace_level=TraceLevel.VERBOSE,
                     invocation_counter=0,
                 )
             except Exception as e:

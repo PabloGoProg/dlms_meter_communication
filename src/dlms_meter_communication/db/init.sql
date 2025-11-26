@@ -80,7 +80,8 @@ CREATE TABLE device_addressing (
   client_address integer NOT NULL,
   server_address integer NOT NULL,
   use_logical_name boolean NOT NULL DEFAULT true,
-  created_at timestamp NOT NULL DEFAULT now(),
+  password text,
+  created_at timestamp NOT NULL DEFAULT now()
 );
 
 CREATE TABLE negotiated_params (

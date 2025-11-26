@@ -23,6 +23,7 @@ from .messurements import (
     MeasurementCreate,
     MeasurementUpdate,
 )
+from .readings import ReadSingleRequest
 
 __all__ = [
     "Device",
@@ -45,4 +46,5 @@ __all__ = [
     "MeasurementList",
     "MeasurementCreate",
     "MeasurementUpdate",
+    "ReadSingleRequest",
 ]

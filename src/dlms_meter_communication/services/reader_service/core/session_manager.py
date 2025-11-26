@@ -143,8 +143,10 @@ class SessionManager:
             Session: Existing or newly created communication session
         """
         session = self.get_session(device)
+
         if session is None:
             session = self.open_session(device, app_layer_provider)
+
         return session
 
     def close_session(self, device: Device) -> bool:
@@ -162,7 +164,7 @@ class SessionManager:
             # Close the session's app layer connection if it exists
             if hasattr(session, "app_layer") and session.app_layer:
                 try:
-                    session.app_layer.disconnect()
+                    session.close()
                 except Exception:
                     pass  # Ignore errors during cleanup
             return True

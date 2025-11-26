@@ -30,15 +30,17 @@ class DeviceAddressingSeeder:
             ),
             DeviceAddressing(
                 device_id=devices[1].id,
-                client_address=1,
-                server_address=17,
+                client_address=18,
+                server_address=1,
                 use_logical_name=True,
+                password="Gurux",
             ),
             DeviceAddressing(
                 device_id=devices[2].id,
                 client_address=32,
                 server_address=1,
                 use_logical_name=True,
+                password="11111111",
             ),
         ]
 

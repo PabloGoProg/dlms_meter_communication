@@ -7,12 +7,16 @@ It handles device creation, retrieval, updates, deletion, and
 communication endpoint associations.
 """
 
-from fastapi import APIRouter, Body, status
+from fastapi import APIRouter, Body, status, Depends
 from fastapi.responses import JSONResponse
 
 from uuid import UUID
+import json
 
-from dlms_meter_communication.api.dependencies import get_session_dependency
+from dlms_meter_communication.api.dependencies import (
+    get_session_dependency,
+    get_reader_service_dependency,
+)
 from dlms_meter_communication.db.database import Session
 from dlms_meter_communication.repositories.device_repository import DeviceRepository
 from dlms_meter_communication.repositories.comm_endpoints_repository import (
@@ -24,10 +28,12 @@ from dlms_meter_communication.schemas.device import (
     DeviceCreate,
     DeviceUpdate,
 )
+from dlms_meter_communication.schemas.readings import ReadSingleRequest
 from dlms_meter_communication.schemas.communication_endpoints import (
     CommunicationEndpointList,
     CommunicationEndpoint,
 )
+from dlms_meter_communication.services.reader_service import ReaderService
 
 # Create router with prefix and tags for API documentation
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -174,6 +180,107 @@ async def show(
             mode="json"
         ),
     )
+
+
+@router.get("/{device_id}/association-view")
+async def get_association_view(
+    device_id: UUID,
+    session: Session = get_session_dependency(),
+    reader_service: ReaderService = Depends(get_reader_service_dependency),
+) -> JSONResponse:
+    """
+    Get the association view from a device.
+    """
+    try:
+        device_repository = DeviceRepository(session)
+        device = device_repository.show(device_id)
+
+        if not device:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": "Device not found"},
+            )
+
+        object_collection = reader_service.get_association_view(device)
+
+        # Ssav content to file
+        with open("object_collection.json", "w") as f:
+            f.write(json.dumps(object_collection, indent=4))
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"data": object_collection},
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": str(e)},
+        )
+
+
+@router.post("/{device_id}/read-single")
+async def read_single(
+    device_id: UUID,
+    payload: ReadSingleRequest = Body(...),
+    session: Session = get_session_dependency(),
+    reader_service: ReaderService = Depends(get_reader_service_dependency),
+) -> JSONResponse:
+    """A
+    Read a single attribute from a device.
+    """
+    try:
+        device_repository = DeviceRepository(session)
+        device = device_repository.show(device_id)
+
+        if not device:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": "Device not found"},
+            )
+
+        data = reader_service.read_single(device, payload.obis)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"data": data},
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": str(e)},
+        )
+
+
+@router.post("/{device_id}/get-common-data")
+async def get_common_data(
+    device_id: UUID,
+    session: Session = get_session_dependency(),
+    reader_service: ReaderService = Depends(get_reader_service_dependency),
+) -> JSONResponse:
+    """
+    Get common data from a device.
+    """
+    try:
+        device_repository = DeviceRepository(session)
+        device = device_repository.show(device_id)
+
+        if not device:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": "Device not found"},
+            )
+
+        data = reader_service.get_common_data(device)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"data": data},
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": str(e)},
+        )
 
 
 @router.post("/", response_model=Device)

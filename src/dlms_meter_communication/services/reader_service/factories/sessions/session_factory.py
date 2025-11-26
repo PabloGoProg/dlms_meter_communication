@@ -66,9 +66,7 @@ class SessionFactory:
                         dv_primary_endpoint
                     )
             elif app_layer_provider_type == AppLayerProviderType.GURUX_COSEM:
-                cosem_app_layer = GuruxAppFactory().create_app_layer(
-                    dv_primary_endpoint
-                )
+                cosem_app_layer = GuruxAppFactory().create_app_layer(device)
 
             # Create and return the session with device and app layer
             session = Session(device)

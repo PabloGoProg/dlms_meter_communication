@@ -11,3 +11,15 @@ class Session:
         self.connection: IConnection = None
         self.frame_codec: IFrameCodec = None
         self.address_resolver: IAddressResolver = None
+
+    def open(self):
+        self.app_layer.associate(self.device)
+
+    def get(self, obis: str) -> bytes:
+        self.app_layer.get(obis)
+
+    def get_association_view(self) -> list[dict]:
+        return self.app_layer.get_association_view()
+
+    def close(self):
+        self.app_layer.disconnect()

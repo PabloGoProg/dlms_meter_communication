@@ -31,7 +31,7 @@ class IAppLayer(ABC):
     """
 
     @abstractmethod
-    def associate(self, device: Device, nps: NegotiatedParams) -> None:
+    def associate(self, device: Device) -> None:
         """
         Establish the application association with the peer (AARQ/AARE).
 
@@ -58,7 +58,17 @@ class IAppLayer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get(self) -> None:
+    def get_association_view(self) -> None:
+        """
+        Get the association view from the peer.
+
+        Returns:
+            The association view from the peer.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get(self, obis: str) -> None:
         """
         Execute an xDLMS GET service.
 

@@ -9,14 +9,8 @@ from unittest.mock import patch
 
 from dlms_meter_communication.models.enums import Medium, Profile
 from dlms_meter_communication.schemas import CommunicationEndpoint
-from dlms_meter_communication.services.reader_service.adapterss.link_layers.hdlc_link_layer import (
-    HDLCLinkLayer,
-)
 from dlms_meter_communication.services.reader_service.adapterss.link_layers.tcp_wrapper_link_layer import (
     TCPWrapperLinkLayer,
-)
-from dlms_meter_communication.services.reader_service.factories.link_layers.hdlc_link_layer_factory import (
-    HDLCLinkLayerFactory,
 )
 from dlms_meter_communication.services.reader_service.factories.link_layers.wrapper_link_layer_factory import (
     TCPWrapperLinkLayerFactory,
