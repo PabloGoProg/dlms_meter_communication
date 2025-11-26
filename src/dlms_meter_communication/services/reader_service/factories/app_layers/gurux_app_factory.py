@@ -79,10 +79,10 @@ class GuruxAppFactory(AppLayerFactory):
                     interfaceType=InterfaceType.HDLC
                     if primary_comm_endpoint.profile == Profile.WRAPPER
                     else InterfaceType.HDLC,
-                    clientAddress=16,
-                    serverAddress=1,
+                    clientAddress=addressing.client_address,
+                    serverAddress=addressing.server_address,
                     forAuthentication=Authentication.LOW,
-                    password="11111111",
+                    password=addressing.password,
                     useLogicalNameReferencing=addressing.use_logical_name,
                 )
 

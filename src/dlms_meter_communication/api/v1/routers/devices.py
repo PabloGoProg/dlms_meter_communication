@@ -28,7 +28,10 @@ from dlms_meter_communication.schemas.device import (
     DeviceCreate,
     DeviceUpdate,
 )
-from dlms_meter_communication.schemas.readings import ReadSingleRequest
+from dlms_meter_communication.schemas.readings import (
+    ReadSingleRequest,
+    ProfileByDateRangeRequest,
+)
 from dlms_meter_communication.schemas.communication_endpoints import (
     CommunicationEndpointList,
     CommunicationEndpoint,
@@ -280,6 +283,92 @@ async def get_common_data(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": str(e)},
+        )
+
+
+@router.post("/{device_id}/profile-by-date-range")
+async def get_profile_by_date_range(
+    device_id: UUID,
+    payload: ProfileByDateRangeRequest = Body(...),
+    session: Session = get_session_dependency(),
+    reader_service: ReaderService = Depends(get_reader_service_dependency),
+) -> JSONResponse:
+    """
+    Extrae las lecturas de un perfil genérico por rango de fechas.
+
+    Este endpoint permite obtener datos históricos de perfiles genéricos (load profiles,
+    event logs, etc.) dentro de un período de tiempo específico. Es útil para extraer
+    datos de consumo, eventos o cualquier serie temporal almacenada en el medidor.
+
+    Args:
+        device_id: UUID del dispositivo
+        payload: Datos de la petición con código OBIS y rango de fechas
+        session: Sesión de base de datos (inyectada)
+        reader_service: Servicio de lectura (inyectado)
+
+    Returns:
+        JSONResponse: Datos del perfil dentro del rango especificado con HTTP 200,
+        o mensajes de error con códigos HTTP apropiados.
+
+    Example Request Body:
+        {
+            "obis": "1.0.99.1.0.255",
+            "start_date": "2024-01-01T00:00:00",
+            "end_date": "2024-01-31T23:59:59"
+        }
+
+    Example Response:
+        {
+            "data": [
+                ["2024-01-01T00:00:00", 100.5, 230.2, 1.5],
+                ["2024-01-01T00:15:00", 102.3, 231.1, 1.6],
+                ...
+            ],
+            "count": 2880,
+            "obis": "1.0.99.1.0.255",
+            "start_date": "2024-01-01T00:00:00",
+            "end_date": "2024-01-31T23:59:59"
+        }
+    """
+    try:
+        device_repository = DeviceRepository(session)
+        device = device_repository.show(device_id)
+
+        if not device:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": "Dispositivo no encontrado"},
+            )
+
+        # Llamar al servicio de lectura con los parámetros
+        data = reader_service.get_profile_by_date_range(
+            device, payload.obis, payload.start_date, payload.end_date
+        )
+
+        # Formatear la respuesta con metadatos adicionales
+        response_content = {
+            "data": data,
+            "count": len(data) if data else 0,
+            "obis": payload.obis,
+            "start_date": payload.start_date.isoformat(),
+            "end_date": payload.end_date.isoformat(),
+        }
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=response_content,
+        )
+    except ValueError as e:
+        # Errores de validación (400 Bad Request)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"message": f"Error de validación: {str(e)}"},
+        )
+    except Exception as e:
+        # Errores del servidor (500 Internal Server Error)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": f"Error al leer el perfil: {str(e)}"},
         )
 
 

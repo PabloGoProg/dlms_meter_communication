@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from dlms_meter_communication.schemas import Device, NegotiatedParams
+from datetime import datetime
 
 
 class IAppLayer(ABC):
@@ -127,5 +128,49 @@ class IAppLayer(ABC):
             ConnectionError: If the link becomes unusable.
             RuntimeError: For protocol errors or invalid method semantics.
             ValueError: For invalid arguments or unsupported methods.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_profile_by_date_range(
+        self, obis: str, start_date: datetime, end_date: datetime
+    ) -> list:
+        """
+        Extrae las lecturas de un perfil genérico por rango de fechas.
+
+        Este método ejecuta una lectura selectiva de un objeto Profile Generic
+        usando el método de acceso por rango de fechas. Los perfiles genéricos
+        almacenan series temporales de datos (load profiles, event logs, etc.)
+        y este método permite extraer únicamente los registros dentro de un
+        período específico.
+
+        Contract (to be specified by implementations):
+            - Debe construir y enviar una petición GET con selective access
+              usando el access descriptor apropiado para rango de fechas (range).
+            - Debe manejar automáticamente el block transfer si la respuesta
+              excede el MaxPDU negociado.
+            - El resultado debe ser una lista de filas donde cada fila contiene
+              los valores correspondientes a los capture objects definidos en
+              el perfil (típicamente: timestamp, valores medidos).
+
+        Args:
+            obis: Código OBIS del objeto Profile Generic (ej: "1.0.99.1.0.255")
+            start_date: Fecha y hora de inicio del rango
+            end_date: Fecha y hora de fin del rango
+
+        Returns:
+            list: Lista de filas del perfil. Cada fila es una lista de valores
+                  correspondientes a las columnas definidas en captureObjects.
+                  Típicamente: [datetime, value1, value2, ...].
+                  Retorna lista vacía si no hay datos en el rango.
+
+        Raises:
+            TimeoutError: Si la lectura no se completa a tiempo o el block
+                         transfer no finaliza.
+            ConnectionError: Si el enlace se vuelve inusable durante la operación.
+            RuntimeError: Si hay errores de protocolo, el perfil no soporta
+                         acceso selectivo, o hay problemas con la conformance.
+            ValueError: Si los argumentos son inválidos (OBIS incorrecto,
+                       fechas inválidas, start_date > end_date).
         """
         raise NotImplementedError

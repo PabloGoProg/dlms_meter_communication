@@ -51,7 +51,6 @@ from gurux_dlms.asn.GXPkcs10 import GXPkcs10
 from gurux_dlms.asn.GXx509Certificate import GXx509Certificate
 from gurux_dlms.asn.GXCertificateRequest import GXCertificateRequest
 from gurux_dlms.objects.enums.CertificateEntity import CertificateEntity
-from gurux_dlms.GXDLMSConverter import GXDLMSConverter
 
 
 class GuruxCOSEMApp(IAppLayer):
@@ -467,6 +466,87 @@ class GuruxCOSEMApp(IAppLayer):
         from datetime import datetime
 
         self.set_clock(datetime.now())
+
+    def get_profile_by_date_range(
+        self, obis_code: str, start: datetime, end: datetime
+    ) -> list:
+        """
+        Extrae las lecturas de un perfil genérico (load profile) por rango de fechas.
+
+        Este método facilita la lectura de datos históricos de perfiles genéricos
+        utilizando un rango de fechas. Es útil para obtener datos de consumo, eventos
+        o cualquier serie temporal almacenada en el medidor dentro de un período específico.
+
+        Args:
+            obis_code: Código OBIS del objeto Profile Generic (ej: "1.0.99.1.0.255")
+            start (datetime): Fecha y hora de inicio del rango
+            end (datetime): Fecha y hora de fin del rango
+
+        Returns:
+            list: Lista de filas (entries) del perfil dentro del rango especificado.
+                  Cada fila es una lista de valores correspondientes a los objetos
+                  capturados definidos en el perfil (timestamp, voltage, current, etc.)
+
+        Raises:
+            ValueError: Si el código OBIS es inválido o las fechas no son válidas
+            GXDLMSException: Si el medidor retorna un error al leer el perfil
+            TimeoutException: Si el medidor no responde a tiempo
+
+        Example:
+            >>> from datetime import datetime, timedelta
+            >>> # Leer datos de carga del último día
+            >>> end_date = datetime.now()
+            >>> start_date = end_date - timedelta(days=1)
+            >>> data = app.get_profile_by_date_range("1.0.99.1.0.255", start_date, end_date)
+            >>> for row in data:
+            ...     print(f"Timestamp: {row[0]}, Value: {row[1]}")
+        """
+        if not obis_code:
+            raise ValueError("El código OBIS no puede estar vacío")
+
+        # Validar formato del código OBIS (debe ser X.X.X.X.X.X)
+        parts = obis_code.split(".")
+        if len(parts) != 6:
+            raise ValueError(
+                f"Formato de código OBIS inválido: {obis_code}. Formato esperado: A.B.C.D.E.F"
+            )
+
+        # Validar fechas
+        if start is None or end is None:
+            raise ValueError("Las fechas de inicio y fin son requeridas")
+        if start > end:
+            raise ValueError("La fecha de inicio debe ser anterior a la fecha de fin")
+
+        try:
+            # Intentar encontrar el objeto Profile Generic en la lista del cliente
+            pg = self.client.objects.findByLN(ObjectType.PROFILE_GENERIC, obis_code)
+
+            # Si no se encuentra, crear un objeto Profile Generic genérico
+            if not pg:
+                pg = GXDLMSProfileGeneric(obis_code)
+                # Agregar a la colección para futuras referencias
+                self.client.objects.append(pg)
+
+            # Leer las capture objects (definición de columnas) si aún no se han leído
+            if not pg.captureObjects:
+                try:
+                    self._read(pg, 3)  # Attribute 3 contiene captureObjects
+                except Exception as e:
+                    print(f"Advertencia: No se pudieron leer los capture objects: {e}")
+
+            # Usar el método privado para leer los datos por rango de fechas
+            data = self._read_rows_by_range(pg, start, end)
+
+            return data if data else []
+
+        except GXDLMSException as e:
+            raise GXDLMSException(
+                f"Error al leer perfil {obis_code} en rango {start} - {end}: {str(e)}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Error al extraer datos del perfil {obis_code}: {str(e)}"
+            )
 
     def _read_dlms_packet(self, data: Any, reply: GXReplyData = None) -> None:
         """
