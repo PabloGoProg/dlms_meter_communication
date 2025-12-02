@@ -8,9 +8,22 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi (>=0.118.0,<0.119.0)",
-    "uvicorn (>=0.37.0,<0.38.0)"
+    "fastapi[standard] (>=0.118.0,<0.119.0)",
+    "uvicorn (>=0.37.0,<0.38.0)",
+    "pydantic-settings (>=2.11.0,<3.0.0)",
+    "gurux-common (>=1.0.13,<2.0.0)",
+    "gurux-net (>=1.0.23,<2.0.0)",
+    "gurux-dlms (>=1.0.191,<2.0.0)",
+    "gurux-serial (>=1.0.21,<2.0.0)",
+    "pyserial (>=3.5,<4.0)",
+    "sqlmodel (>=0.0.27,<0.0.28)",
+    "psycopg2 (>=2.9.11,<3.0.0)",
+    "pytest (>=8.4.2,<9.0.0)",
+    "pytest-html (>=4.1.1,<5.0.0)"
 ]
+
+[project.scripts]
+dlms = "dlms_meter_communication.cli:main"
 
 [tool.poetry]
 packages = [{include = "dlms_meter_communication", from = "src"}]
