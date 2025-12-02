@@ -6,12 +6,15 @@ and initialization functions for the DLMS meter communication system.
 It uses SQLModel for ORM functionality and PostgreSQL as the database backend.
 """
 
+from contextlib import contextmanager
+
 from sqlmodel import create_engine, Session
 from ..core.config import config
 from sqlmodel import SQLModel
 
 # Create database engine using the database URL from configuration
 # The engine manages the connection pool and database connectivity
+should_echo_sql = config.node_env == "development"
 engine = create_engine(config.db_url)
 
 
@@ -30,6 +33,25 @@ def init_db():
 
 
 def get_session():
+    """
+    Create a database session.
+    """
+    with Session(engine) as session:
+        try:
+            yield session
+            # Commit all changes if no exceptions occurred
+            session.commit()
+        except Exception as e:
+            # Rollback changes on error
+            session.rollback()
+            raise e
+        finally:
+            # Ensure session is always closed
+            session.close()
+
+
+@contextmanager
+def get_context_session():
     """
     Create a database session context manager.
 
@@ -65,6 +87,3 @@ def get_session():
             # Rollback changes on error
             session.rollback()
             raise e
-        finally:
-            # Ensure session is always closed
-            session.close()

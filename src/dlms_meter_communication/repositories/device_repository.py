@@ -11,20 +11,11 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
 
 from ..models.device import Device
 from ..schemas.device import DeviceCreate, DeviceUpdate
-
-
-class DeviceNotFoundError(Exception):
-    """
-    Exception raised when a requested device is not found.
-
-    This exception is raised when attempting to perform operations
-    on a device that doesn't exist in the database.
-    """
-
-    pass
+from sqlalchemy.exc import NoResultFound
 
 
 class DeviceRepository:
@@ -69,9 +60,12 @@ class DeviceRepository:
             Exception: If database query fails.
         """
         try:
-            stmt = select(Device)
+            stmt = select(Device).options(
+                selectinload(Device.communication_endpoints),
+                selectinload(Device.device_addressings),
+            )
             stmt = stmt.order_by(
-                Device.created_at.desc() if order_desc else Device.created_at
+                Device.created_at.desc() if order_desc else Device.created_at.asc(),
             )
             stmt = stmt.offset(offset).limit(limit)
             devices = self._session.exec(stmt).all()
@@ -92,7 +86,14 @@ class DeviceRepository:
         Returns:
             Optional[Device]: Device entity if found, None otherwise.
         """
-        entity = self._session.get(Device, device_id)
+        entity = self._session.get(
+            Device,
+            device_id,
+            options=[
+                selectinload(Device.communication_endpoints),
+                selectinload(Device.device_addressings),
+            ],
+        )
         return entity if entity else None
 
     def store(self, data: DeviceCreate) -> Device:
@@ -129,12 +130,12 @@ class DeviceRepository:
             Device: The updated device entity.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
         update_data = patch.model_dump(exclude_unset=True)
 
@@ -156,12 +157,12 @@ class DeviceRepository:
             device_id: UUID of the device to remove.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
         self._session.delete(entity)
         self._session.flush()
@@ -178,12 +179,15 @@ class DeviceRepository:
             device_id: UUID of the device to destroy.
 
         Raises:
-            DeviceNotFoundError: If the device with the given ID doesn't exist.
+            NoResultFound: If the device with the given ID doesn't exist.
         """
         entity = self.show(device_id)
 
         if entity is None:
-            raise DeviceNotFoundError(str(device_id))
+            raise NoResultFound(f"Device with id {device_id} not found")
 
-        self._session.delete(entity)
-        self._session.flush()
+        try:
+            self._session.delete(entity)
+            self._session.flush()
+        except Exception as e:
+            raise e

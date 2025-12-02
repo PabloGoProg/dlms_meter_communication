@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-from .enums import Medium, Profile
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
-from sqlmodel import Field, SQLModel, Boolean
+from sqlmodel import Field, SQLModel, Boolean, Relationship
+from .enums import Medium, Profile
 from sqlalchemy import (
     Column,
     text,
@@ -12,9 +10,13 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Index,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, ENUM as PGENUM, INET
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from .device import Device
 
 
 class CommunicationEndpoint(SQLModel, table=True):
@@ -79,13 +81,17 @@ class CommunicationEndpoint(SQLModel, table=True):
         default=None,
         sa_column=Column(INET, nullable=True),
     )
-    port: Optional[int] = Field(default=None, sa_column=Column(Integer))
-    serial_port: Optional[str] = None
-    baud_rate: Optional[int] = None
+    port: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    serial_port: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    baud_rate: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
+    )
     is_primary: bool = Field(
         default=False,
-        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+        sa_column=Column(Boolean, nullable=False, default=False),
     )
+
+    device: Optional["Device"] = Relationship(back_populates="communication_endpoints")
 
     created_at: datetime = Field(
         sa_column=Column(

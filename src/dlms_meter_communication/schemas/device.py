@@ -5,9 +5,12 @@ This module defines Pydantic models for device-related data structures,
 including request/response schemas for CRUD operations and data validation.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
+
+from .communication_endpoints import CommunicationEndpoint
+from .device_addressing import DeviceAddressing
 
 
 class Device(BaseModel):
@@ -33,6 +36,8 @@ class Device(BaseModel):
     serial_number: str
     brand: str = None
     model: str = None
+    communication_endpoints: List[CommunicationEndpoint] = Field(default_factory=list)
+    device_addressings: List[DeviceAddressing] = Field(default_factory=list)
 
 
 class DeviceList(BaseModel):
@@ -65,10 +70,10 @@ class DeviceCreate(BaseModel):
     """
 
     name: str
-    description: str = None
-    serial_number: str
-    brand: str = None
-    model: str = None
+    description: Optional[str] = None
+    serial_number: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
 
 
 class DeviceUpdate(BaseModel):
